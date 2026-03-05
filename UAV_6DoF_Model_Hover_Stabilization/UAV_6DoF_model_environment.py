@@ -12,8 +12,13 @@ class UAV_6DoF_Model_Environment:
 		self.next_state_vector = {"p": [], "v": [], "q": [], "omega": []}
 		self.action_space = {"T_sum": 0.0, "tau_x": 0.0, "tau_y": 0.0, "tau_z": 0.0}
 		self.F_b_t = np.array([0, 0, self.action_space["T_sum"]])
-		self.UAV_mass_in_kg = 0.7
+		self.battery_mass_in_kg = 0.9
+		self.UAV_motor_mass_in_kg = 0.06
+		self.UAV_mass_in_kg = self.battery_mass_in_kg + 4 * self.UAV_motor_mass_in_kg
+		self.UAV_wing_shoulder_in_m = 0.2
 		self.F_g = np.array([0, 0, -self.UAV_mass_in_kg * 9.8])
+		self.inertia_moment_J = self.get_moment_inertia_J()
+		self.get_force_moment_tau = self.get_force_moment_tau()
 		self.state_space_restrictions = state_space_restrictions
 		self.hover_stabilization_height = hover_stabilization_height
 		self.hover_time_in_sec = hover_time_in_sec
@@ -67,12 +72,24 @@ class UAV_6DoF_Model_Environment:
 		# TODO: think, how to define moment tau and inertion moment matrix J.
 		pass
 
+	def get_moment_inertia_J(self):
+		Jx = 2 * self.UAV_motor_mass_in_kg * self.UAV_wing_shoulder_in_m ** 2
+		Jy = 2 * self.UAV_motor_mass_in_kg * self.UAV_wing_shoulder_in_m ** 2
+		Jz = 4 * self.UAV_motor_mass_in_kg * self.UAV_wing_shoulder_in_m ** 2
+		inertia_moment_J = np.array([
+			[Jx, 0, 0], [0, Jy, 0], [0, 0, Jz]
+		])
+		return inertia_moment_J
+
+	def get_force_moment_tau(self):
+		pass
+
 if __name__ == "__main__":
 	UAV_model_environment = UAV_6DoF_Model_Environment(
 		0.99, {"alpha": 1.8, "beta": 0.5, "gamma": 1.2, "delta": 1.4},
 		{
 			"p": np.array([0, 0, 0]), "v": np.array([0, 0, 0]),
-			"q": np.array([0, 0, 0, 0]), "omega": np.array([0, 0, 0])
+			"q": np.array([1, 0, 0, 0]), "omega": np.array([0, 0, 0])
 		},
 		{
 			"z": [0, "max_height"], "q1": [0, 0.7], "q2": [0, 0.7]
