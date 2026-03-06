@@ -31,11 +31,11 @@ class UAV_6DoF_Model_Environment:
 		self.next_state_vector["p"] = self.current_state_vector["p"] + self.current_state_vector["v"] * self.delta_t
 
 	def define_next_vector_v(self):
-		F_world = self.get_multiplication_of_quaternion_rotation_matrix_and_F_b_t()
+		F_world = self.get_dot_product_of_quaternion_rotation_matrix_and_F_b_t()
 		acceleration = 1 / self.UAV_mass_in_kg * (F_world + self.F_g)
 		self.next_state_vector["v"] = self.current_state_vector["v"] + acceleration * self.delta_t
 
-	def get_multiplication_of_quaternion_rotation_matrix_and_F_b_t(self):
+	def get_dot_product_of_quaternion_rotation_matrix_and_F_b_t(self):
 		R_q_t = np.array([
 			[
 				1 - 2 * (self.current_state_vector["q"][2] ** 2 + self.current_state_vector["q"][3] ** 2),
@@ -56,10 +56,10 @@ class UAV_6DoF_Model_Environment:
 		return R_q_t.dot(self.F_b_t)
 
 	def define_next_vector_q(self):
-		multiplication_of_Omega_omega_t_and_q = self.get_multiplication_of_Omega_matrix_and_quaternion()
+		multiplication_of_Omega_omega_t_and_q = self.get_dot_product_of_Omega_matrix_and_quaternion()
 		self.next_state_vector["q"] = self.current_state_vector["q"] + self.delta_t / 2 * multiplication_of_Omega_omega_t_and_q
 
-	def get_multiplication_of_Omega_matrix_and_quaternion(self):
+	def get_dot_product_of_Omega_matrix_and_quaternion(self):
 		Omega_omega_t = np.array([
 			[0, -self.current_state_vector["omega"][0], -self.current_state_vector["omega"][1], -self.current_state_vector["omega"][2]],
 			[self.current_state_vector["omega"][0], 0, -self.current_state_vector["omega"][2], self.current_state_vector["omega"][1]],
@@ -69,7 +69,15 @@ class UAV_6DoF_Model_Environment:
 		return Omega_omega_t.dot(self.current_state_vector["q"])
 
 	def define_next_vector_omega(self):
-		# TODO: think, how to define moment tau and inertion moment matrix J.
+		moments_tau = np.array([
+			self.action_space["tau_x"], self.action_space["tau_y"], self.action_space["tau_z"]
+		])
+		inversed_J = np.linalg.inv(self.inertia_moment_J)
+		dot_product_of_J_and_omega = self.inertia_moment_J.dot(self.current_state_vector["omega"])
+
+		self.next_state_vector["omega"] = self.current_state_vector["omega"] + inversed_J.dot(
+			moments_tau - np.cross(self.current_state_vector["omega"], dot_product_of_J_and_omega)
+		) * self.delta_t
 		pass
 
 	def get_moment_inertia_J(self):
