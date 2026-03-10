@@ -1,6 +1,5 @@
 # drone 6DoF model environment for UAV hover stabilization
 import numpy as np
-import time
 import pandas as pd
 import random
 
@@ -31,11 +30,11 @@ class UAV_6DoF_Model_Environment:
 		self.x_y_coeffs_for_min_max = {"x": 1.1, "y": 1.1}
 		self.z_coeff_for_max_height = 1.25
 		self.hover_stabilization_height_in_m = hover_stabilization_height_in_m
-		self.target_p_components_for_hover_stabilization_in_m = {
-			"x": self.init_state_vector["p"][0] , 
-			"y": self.init_state_vector["p"][1],
-			"z": self.hover_stabilization_height_in_m
-		}
+		self.target_p_components_for_hover_stabilization_in_m = [
+			self.init_state_vector["p"][0], 
+			self.init_state_vector["p"][1],
+			self.hover_stabilization_height_in_m
+		]
 		self.current_state_vector_reward = 0
 		self.hover_time_in_sec = hover_time_in_sec
 
@@ -51,16 +50,17 @@ class UAV_6DoF_Model_Environment:
 				print(f"[INFO] Simulation processing {self.current_step // 100} seconds.")
 			if self.early_episode_termination:
 				print("[INFO] Simulation(episode) was terminated.")
+				self.show_logs()
 				return 0
+			self.current_step += 1
 			next_action = self.get_action()
 			self.define_next_state_vector(next_action)
 			self.make_next_state_vector_as_current()
 			self.reset_next_state_vector()
 			self.log_p_vector_components_at_current_step()
+			self.check_current_state_vector_components_to_early_episode_termination()
 			
-			self.current_step += self.delta_t_in_sec
-			time.sleep(self.delta_t_in_sec)
-		print(f"[INFO] Simulation finished by time = {self.current_step} seconds.")
+		print(f"[INFO] Simulation finished by time = {self.current_step // 100} seconds.")
 		self.show_logs()
 
 	def define_next_state_vector(self, action_t: dict):
@@ -73,7 +73,12 @@ class UAV_6DoF_Model_Environment:
 		self.define_next_vector_omega()
 
 	def make_next_state_vector_as_current(self):
-		self.current_state_vector = self.next_state_vector
+		self.current_state_vector = {
+			"p": self.next_state_vector["p"].copy(),
+			"v": self.next_state_vector["v"].copy(),
+			"q": self.next_state_vector["q"].copy(),
+			"omega": self.next_state_vector["omega"].copy()
+		}
 
 	def reset_next_state_vector(self):
 		self.next_state_vector = {"p": [], "v": [], "q": [], "omega": []}
@@ -91,16 +96,29 @@ class UAV_6DoF_Model_Environment:
 				self.action_space_values[action] = min_action_value
 
 	def check_current_state_vector_components_to_early_episode_termination(self):
-		for state_vector_component in ["p", "q"]:
-			if self.is_early_episode_termination_by_vector_component(state_vector_component):
-				self.early_episode_termination = True
-				return 0
+		if self.is_early_episode_termination_by_p_vector_component():
+			self.early_episode_termination = True
+		if self.is_early_episode_termination_by_q_vector_component():
+			self.early_episode_termination = True
+		return 0
 
-	def is_early_episode_termination_by_vector_component(self, vector_component: str):
-		for (vector_component, vector_component_min, vector_component_max) in zip(
-			self.current_state_vector[vector_component], self.state_space_restrictions[vector_component].values()
-		):
-			if vector_component > vector_component_max or vector_component < vector_component_min:
+	def is_early_episode_termination_by_p_vector_component(self):
+		for (i, component_value) in enumerate(self.current_state_vector["p"]):
+			vector_component_min = list(self.state_space_restrictions["p"].values())[i][0]
+			vector_component_max = list(self.state_space_restrictions["p"].values())[i][1]
+			print(f"component value p{i}: {component_value}, min: {vector_component_min}, max: {vector_component_max}")
+			if component_value > vector_component_max or component_value < vector_component_min:
+				return True
+		return False
+
+	def is_early_episode_termination_by_q_vector_component(self):
+		q_restricted_components = [int(component[-1]) for component in self.state_space_restrictions["q"].keys()]
+		for q_component in q_restricted_components:
+			vector_component_min = self.state_space_restrictions["q"][f"q{q_component}"][0]
+			vector_component_max = self.state_space_restrictions["q"][f"q{q_component}"][1]
+			component_value = self.current_state_vector["q"][q_component]
+			print(f"component value q{q_component}: {component_value}, min: {vector_component_min}, max: {vector_component_max}")
+			if component_value > vector_component_max or component_value < vector_component_min:
 				return True
 		return False
 
@@ -144,13 +162,13 @@ class UAV_6DoF_Model_Environment:
 		return R_q_t.dot(self.thrust_force_F_b_t)
 
 	def define_next_vector_q(self):
-		self.quaternion_normalization(self.current_state_vector["q"])
 		multiplication_of_Omega_omega_t_and_q = self.get_dot_product_of_Omega_matrix_and_quaternion()
 		self.next_state_vector["q"] = self.current_state_vector["q"] + self.delta_t_in_sec / 2 * multiplication_of_Omega_omega_t_and_q
+		self.quaternion_normalization(self.next_state_vector["q"])
 
 	def quaternion_normalization(self, quaternion: np.array):
 		quaternion_module = np.sqrt(quaternion[0] ** 2 + quaternion[1] ** 2 + quaternion[2] ** 2 + quaternion[3] ** 2)
-		return quaternion / quaternion_module
+		self.current_state_vector["q"] = quaternion / quaternion_module
 
 	def get_dot_product_of_Omega_matrix_and_quaternion(self):
 		Omega_omega_t = np.array([
@@ -196,7 +214,7 @@ class UAV_6DoF_Model_Environment:
 		vector_deviation_from_target = 0
 		for (i, current_vector_component_value) in enumerate(self.current_state_vector[vector]):
 			vector_deviation_from_target += (
-				self.current_state_vector[vector][i] - self.target_p_components_for_hover_stabilization_in_m[vector][i]
+				self.current_state_vector[vector][i] - self.target_p_components_for_hover_stabilization_in_m[i]
 			) ** 2
 		return np.sqrt(vector_deviation_from_target)
 
@@ -213,10 +231,10 @@ class UAV_6DoF_Model_Environment:
 		return np.sqrt(action_vector_by_module)
 
 	def log_p_vector_components_at_current_step(self):
-		self.p_vector_component_logs["time_in_sec"] = self.current_step
-		self.p_vector_component_logs["x"] = self.current_state_vector["p"][0]
-		self.p_vector_component_logs["y"] = self.current_state_vector["p"][1]
-		self.p_vector_component_logs["z"] = self.current_state_vector["p"][2]
+		self.p_vector_component_logs["time_in_sec"].append(self.current_step * self.delta_t_in_sec)
+		self.p_vector_component_logs["x"].append(self.current_state_vector["p"][0])
+		self.p_vector_component_logs["y"].append(self.current_state_vector["p"][1])
+		self.p_vector_component_logs["z"].append(self.current_state_vector["p"][2])
 
 	def show_logs(self):
 		logs_dataset = pd.DataFrame(self.p_vector_component_logs)
@@ -224,9 +242,9 @@ class UAV_6DoF_Model_Environment:
 
 	def get_action(self):
 		return {
-			"T_sum": random.randint(0, int(2 * self.UAV_mass_in_kg * 9.8)), 
-			"tau_x": random.randint(-1, 1), "tau_y": random.randint(-1, 1), 
-			"tau_z": random.randint(-1, 1)
+			"T_sum": self.UAV_mass_in_kg * 9.8 + random.uniform(-1, 1), 
+			"tau_x": random.randint(-1, 1) / 20, "tau_y": random.randint(-1, 1) / 20,
+			"tau_z": random.randint(-1, 1) / 50
 		}
 
 if __name__ == "__main__":
@@ -238,8 +256,8 @@ if __name__ == "__main__":
 		},
 		{
 			"p": {"x": ["min_x", "max_x"], "y": ["min_y", "max_y"], "z": [0, "max_height"]}, 
-			"q": {"q1": [0, 0.7], "q2": [0, 0.7]}, "T_sum": [0, "max_T_sum"]
+			"q": {"q1": [-0.7, 0.7], "q2": [-0.7, 0.7]}, "T_sum": [0, "max_T_sum"]
 		},
-		0.5, 2, 200
+		0.5, 2, 1000
 	)
 	UAV_model_environment.start_simulation()
