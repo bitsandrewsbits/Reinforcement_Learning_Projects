@@ -7,7 +7,7 @@ class UAV_6DoF_Model_Environment:
 	def __init__(self, discount_gamma, reward_coefs: dict, 
 	init_state_vector: dict, state_space_restrictions: dict, 
 	hover_stabilization_height_in_m, hover_time_in_sec: int,
-	simulation_steps: int):
+	simulation_steps: int, test_mode = False):
 		self.discount_gamma = discount_gamma
 		self.reward_coefs = reward_coefs
 		self.delta_t_in_sec = 0.01
@@ -42,8 +42,9 @@ class UAV_6DoF_Model_Environment:
 		self.current_step = 0
 		self.simulation_steps = simulation_steps
 		self.p_vector_component_logs = {"time_in_sec": [], "x": [], "y": [], "z": []}
+		self.test_mode = test_mode
 
-	def start_simulation(self):
+	def start_test_simulation(self):
 		self.update_state_space_restrictions()
 		while self.current_step < self.simulation_steps:
 			if self.current_step % 100 == 0:
@@ -53,17 +54,29 @@ class UAV_6DoF_Model_Environment:
 				self.show_logs()
 				return 0
 			self.current_step += 1
-			next_action = self.get_action()
-			self.define_next_state_vector(next_action)
-			self.make_next_state_vector_as_current()
-			self.reset_next_state_vector()
-			self.log_p_vector_components_at_current_step()
-			self.check_current_state_vector_components_to_early_episode_termination()
+			action = self.get_test_action()
+			self.next_state_vector, self.current_state_vector_reward = self.step(action)
 			
 		print(f"[INFO] Simulation finished by time = {self.current_step // 100} seconds.")
 		self.show_logs()
 
-	def define_next_state_vector(self, action_t: dict):
+	def step(self, action_t: dict):
+		next_state_vector = self.get_next_state_vector(action_t)
+		current_state_vector_reward = self.get_reward_for_current_state_vector()
+
+		self.log_p_vector_components_at_current_step()
+		self.check_current_state_vector_components_to_early_episode_termination()
+		
+		self.make_next_state_vector_as_current()
+		self.reset_next_state_vector()
+
+		return next_state_vector, current_state_vector_reward
+
+	def reset_environment(self):
+		# TODO: create
+		pass
+
+	def get_next_state_vector(self, action_t: dict):
 		self.update_action_space_values(action_t)
 		self.restrict_action_t_values()
 		self.update_thrust_force_F_b_t()
@@ -71,6 +84,8 @@ class UAV_6DoF_Model_Environment:
 		self.define_next_vector_v()
 		self.define_next_vector_q()
 		self.define_next_vector_omega()
+
+		return self.next_state_vector
 
 	def make_next_state_vector_as_current(self):
 		self.current_state_vector = {
@@ -106,7 +121,6 @@ class UAV_6DoF_Model_Environment:
 		for (i, component_value) in enumerate(self.current_state_vector["p"]):
 			vector_component_min = list(self.state_space_restrictions["p"].values())[i][0]
 			vector_component_max = list(self.state_space_restrictions["p"].values())[i][1]
-			print(f"component value p{i}: {component_value}, min: {vector_component_min}, max: {vector_component_max}")
 			if component_value > vector_component_max or component_value < vector_component_min:
 				return True
 		return False
@@ -117,7 +131,6 @@ class UAV_6DoF_Model_Environment:
 			vector_component_min = self.state_space_restrictions["q"][f"q{q_component}"][0]
 			vector_component_max = self.state_space_restrictions["q"][f"q{q_component}"][1]
 			component_value = self.current_state_vector["q"][q_component]
-			print(f"component value q{q_component}: {component_value}, min: {vector_component_min}, max: {vector_component_max}")
 			if component_value > vector_component_max or component_value < vector_component_min:
 				return True
 		return False
@@ -240,7 +253,7 @@ class UAV_6DoF_Model_Environment:
 		logs_dataset = pd.DataFrame(self.p_vector_component_logs)
 		print(logs_dataset)
 
-	def get_action(self):
+	def get_test_action(self):
 		return {
 			"T_sum": self.UAV_mass_in_kg * 9.8 + random.uniform(-1, 1), 
 			"tau_x": random.randint(-1, 1) / 20, "tau_y": random.randint(-1, 1) / 20,
@@ -258,6 +271,6 @@ if __name__ == "__main__":
 			"p": {"x": ["min_x", "max_x"], "y": ["min_y", "max_y"], "z": [0, "max_height"]}, 
 			"q": {"q1": [-0.7, 0.7], "q2": [-0.7, 0.7]}, "T_sum": [0, "max_T_sum"]
 		},
-		0.5, 2, 1000
+		0.5, 2, 1000, test_mode = True
 	)
-	UAV_model_environment.start_simulation()
+	UAV_model_environment.start_test_simulation()
