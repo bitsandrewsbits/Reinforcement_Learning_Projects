@@ -31,7 +31,7 @@ class UAV_6DoF_Model_Environment:
 		self.z_coeff_for_max_height = 1.25
 		self.hover_stabilization_height_in_m = hover_stabilization_height_in_m
 		self.target_p_components_for_hover_stabilization_in_m = [
-			self.init_state_vector["p"][0], 
+			self.init_state_vector["p"][0],
 			self.init_state_vector["p"][1],
 			self.hover_stabilization_height_in_m
 		]
@@ -41,7 +41,7 @@ class UAV_6DoF_Model_Environment:
 		self.early_episode_termination = False
 		self.current_step = 0
 		self.simulation_steps = simulation_steps
-		self.p_vector_component_logs = {"time_in_sec": [], "x": [], "y": [], "z": []}
+		self.p_vector_component_episode_logs = {"time_in_sec": [], "x": [], "y": [], "z": []}
 		self.test_mode = test_mode
 
 	def start_test_simulation(self):
@@ -73,8 +73,14 @@ class UAV_6DoF_Model_Environment:
 		return next_state_vector, current_state_vector_reward
 
 	def reset_environment(self):
-		# TODO: create
-		pass
+		self.current_state_vector = self.init_state_vector
+		self.next_state_vector = {"p": [], "v": [], "q": [], "omega": []}
+		self.action_space_values = {"T_sum": 0.0, "tau_x": 0.0, "tau_y": 0.0, "tau_z": 0.0}
+		self.thrust_force_F_b_t = np.array([0, 0, self.action_space_values["T_sum"]])
+		self.current_state_vector_reward = 0
+		self.early_episode_termination = False
+		self.current_step = 0
+		self.p_vector_component_episode_logs = {"time_in_sec": [], "x": [], "y": [], "z": []}
 
 	def get_next_state_vector(self, action_t: dict):
 		self.update_action_space_values(action_t)
@@ -244,13 +250,13 @@ class UAV_6DoF_Model_Environment:
 		return np.sqrt(action_vector_by_module)
 
 	def log_p_vector_components_at_current_step(self):
-		self.p_vector_component_logs["time_in_sec"].append(self.current_step * self.delta_t_in_sec)
-		self.p_vector_component_logs["x"].append(self.current_state_vector["p"][0])
-		self.p_vector_component_logs["y"].append(self.current_state_vector["p"][1])
-		self.p_vector_component_logs["z"].append(self.current_state_vector["p"][2])
+		self.p_vector_component_episode_logs["time_in_sec"].append(self.current_step * self.delta_t_in_sec)
+		self.p_vector_component_episode_logs["x"].append(self.current_state_vector["p"][0])
+		self.p_vector_component_episode_logs["y"].append(self.current_state_vector["p"][1])
+		self.p_vector_component_episode_logs["z"].append(self.current_state_vector["p"][2])
 
 	def show_logs(self):
-		logs_dataset = pd.DataFrame(self.p_vector_component_logs)
+		logs_dataset = pd.DataFrame(self.p_vector_component_episode_logs)
 		print(logs_dataset)
 
 	def get_test_action(self):
