@@ -2,6 +2,7 @@
 # transition vector structure - (s_t, a_t, r_t, s_t+1)
 # replay buffer structure = [(s_0, a_0, r_0, s_1), (s_1, a_1, r_1, s_2),..., (s_T-1, a_T-1, r_T-1, s_T)]
 # trajectory -> DataFrame per episode
+# trajectories = [trajectory-df-1, trajectory-df-2, ... , trajectory-df-N]
 
 from random import randint
 import pandas as pd
@@ -19,7 +20,6 @@ class ReplayBuffer:
 				self.generate_reward_t(), self.generate_state_tp1()
 			)
 			self.add_transition_vector_to_buffer(transition_vector)
-		print(self.buffer)
 
 	def test_buffer_batch_getting(self):
 		for _ in range(3):
@@ -72,8 +72,6 @@ class ReplayBuffer:
 			"omega": [randint(0, 5), randint(0, 5), randint(0, 5)]
 		}
 		return state_tp1
-
-# trajectories = [trajectory-df-1, trajectory-df-2, ... , trajectory-df-N]
 
 if __name__ == "__main__":
 	buffer = ReplayBuffer(
