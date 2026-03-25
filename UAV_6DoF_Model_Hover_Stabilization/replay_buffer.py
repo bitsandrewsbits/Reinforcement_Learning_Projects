@@ -6,6 +6,7 @@
 
 from random import randint
 import pandas as pd
+import additional_functions as adf
 
 class ReplayBuffer:
 	def __init__(self, buffer: pd.DataFrame, buffer_max_transition_vectors: int, batch_size: int):
@@ -30,21 +31,14 @@ class ReplayBuffer:
 	def add_transition_vector_to_buffer(self, transition_vector: pd.DataFrame):
 		self.buffer = pd.concat([self.buffer, transition_vector], ignore_index = True)
 
-	def get_transition_vector(self, state_t: dict, action_t: float, reward_t: float, state_tp1: dict):
+	def get_transition_vector(self, state_t: dict, action_t: dict, reward_t: float, state_tp1: dict):
 		transition_vector = {"state_t": [], "action_t": [], "reward_t": [], "state_tp1": []}
-		transition_vector["state_t"].append(self.get_converted_env_state_vector(state_t))
-		transition_vector["action_t"].append(action_t)
+		transition_vector["state_t"].append(adf.get_values_list(state_t))
+		transition_vector["action_t"].append(list(action_t.values()))
 		transition_vector["reward_t"].append(reward_t)
-		transition_vector["state_tp1"].append(self.get_converted_env_state_vector(state_tp1))
+		transition_vector["state_tp1"].append(adf.get_values_list(state_tp1))
 
 		return pd.DataFrame(transition_vector)
-
-	def get_converted_env_state_vector(self, env_state_vector: dict):
-		converted_vector = []
-		for vector_component_values in env_state_vector.values():
-			converted_vector += vector_component_values
-
-		return converted_vector
 
 	def get_batch(self) -> pd.DataFrame:
 		return self.buffer.sample(self.batch_size, axis = 0)
@@ -59,7 +53,10 @@ class ReplayBuffer:
 		return state_t
 
 	def generate_action_t(self):
-		return randint(-10, 10) / 10
+		return {
+			"T_sum": randint(0, 80), "tau_x": randint(-3, 3),
+			"tau_y": randint(-3, 3), "tau_z": randint(-3, 3)
+		}
 
 	def generate_reward_t(self):
 		return randint(-80, 80)
