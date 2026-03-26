@@ -1,9 +1,10 @@
 # additional functions
+import numpy as np
 
-def get_values_list(target_dict: dict):
+def get_values_list(target_dict: dict[np.array]):
 	values = []
 	for dict_component_values in target_dict.values():
-		values += dict_component_values
+		values += list(dict_component_values)
 
 	return values
 
