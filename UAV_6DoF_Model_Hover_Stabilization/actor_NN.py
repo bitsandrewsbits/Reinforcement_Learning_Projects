@@ -21,9 +21,9 @@ class Actor:
 		self.action_t_batch = {}
 
 	def get_action(self, state_t: dict):
-		state_t_array = adf.get_values_list(state_t)
-		action_t_batch = self.get_actions_n_batch(state_t_array)
-		action_vector = self.get_action_vector(action_t_batch)
+		state_t_array = np.array([adf.get_values_list(state_t)])
+		action_t_as_batch = self.get_actions_n_batch(state_t_array)
+		action_vector = self.get_action_vector(action_t_as_batch)
 		return {
 			"T_sum": action_vector[0],
 			"tau_x": action_vector[1],
