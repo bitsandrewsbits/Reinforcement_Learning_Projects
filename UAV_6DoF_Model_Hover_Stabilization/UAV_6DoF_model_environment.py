@@ -23,6 +23,7 @@ class UAV_6DoF_Model_Environment:
 		self.F_g = np.array([0, 0, -self.UAV_mass_in_kg * 9.8])
 		self.inertia_moment_J = self.get_moment_inertia_J()
 		self.state_space_restrictions = state_space_restrictions
+
 		self.action_space_restrictions = {
 			"T_sum": [0, 2 * self.UAV_mass_in_kg * 9.8],
 			"tau_x": [-1, 1], "tau_y": [-1, 1], "tau_z": [-1, 1]
@@ -35,6 +36,7 @@ class UAV_6DoF_Model_Environment:
 			self.init_state_vector["p"][1],
 			self.hover_stabilization_height_in_m
 		]
+		self.update_state_space_restrictions()
 		self.current_state_vector_reward = 0
 		self.hover_time_in_sec = hover_time_in_sec
 
