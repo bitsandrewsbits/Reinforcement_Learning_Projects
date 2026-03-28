@@ -23,10 +23,12 @@ class ReplayBuffer:
 			self.add_transition_vector_to_buffer(transition_vector)
 
 	def test_buffer_batch_getting(self):
-		for _ in range(3):
+		for _ in range(1):
 			batch = self.get_batch()
 			print("Current batch:")
 			print(batch)
+			print("Separated vectors:")
+			states, actions, rewards, next_states = self.get_states_actions_rewards_next_states(batch)
 
 	def add_transition_vector_to_buffer(self, transition_vector: pd.DataFrame):
 		self.buffer = pd.concat([self.buffer, transition_vector], ignore_index = True)
@@ -42,6 +44,13 @@ class ReplayBuffer:
 
 	def get_batch(self) -> pd.DataFrame:
 		return self.buffer.sample(self.batch_size, axis = 0)
+
+	def get_states_actions_rewards_next_states(self, batch: pd.DataFrame):
+		states = batch["state_t"].values
+		actions = batch["action_t"].values
+		rewards = batch["reward_t"].values
+		next_states = batch["state_tp1"].values
+		return states, actions, rewards, next_states
 
 	def generate_state_t(self):
 		state_t = {
