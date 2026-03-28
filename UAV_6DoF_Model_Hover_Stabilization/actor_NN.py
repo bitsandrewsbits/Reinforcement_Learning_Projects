@@ -8,7 +8,7 @@ import replay_buffer as rb
 import UAV_6DoF_model_environment as uav_env
 import additional_functions as adf
 
-class Actor:
+class Actor(tf.keras.Model):
 	def __init__(self, replay_buffer):
 		self.replay_buffer = replay_buffer
 		self.state = {}
