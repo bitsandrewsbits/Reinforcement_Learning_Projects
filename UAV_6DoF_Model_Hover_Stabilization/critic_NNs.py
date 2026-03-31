@@ -19,37 +19,39 @@ class Critic(tf.keras.Model):
 		self.Q2_s_a_batch = tf.Tensor()
 		self.min_Q1_Q2_batch = tf.Tensor()
 
-	def get_critic_loss(self, states_n_batch, actions_n_batch, target_Q):
-		self.states_actions_batch = self.get_states_actions_batch(states_n_batch, actions_n_batch)
-		self.define_min_Q1_Q2_batch(self.states_actions_batch)
+	def get_critic_loss(self, target_Q):
 		critic_loss = (self.Q1_s_a_batch - target_Q) ** 2 + (self.Q2_s_a_batch - target_Q) ** 2
 		return critic_loss
 
-	def define_min_Q1_Q2_batch(self, states_actions_batch):
-		self.Q1_s_a_batch = self.get_Q1_a_s_batch(states_actions_batch)
-		self.Q2_s_a_batch = self.get_Q2_a_s_batch(states_actions_batch)
-		self.min_Q1_Q2_batch = min(self.Q1_s_a_batch, self.Q2_s_a_batch)
+	def define_min_Q1_Q2_batch(self):
+		self.Q1_s_a_batch = self.get_Q1_a_s_batch()
+		self.Q2_s_a_batch = self.get_Q2_a_s_batch()
+		self.min_Q1_Q2_batch = tf.math.minimum(self.Q1_s_a_batch, self.Q2_s_a_batch)
 
-	def get_Q1_a_s_batch(self, states_actions_batch):
-		dense_layer_1 = self.Q1_dense_layer_1(states_actions_batch)
+	def get_Q1_a_s_batch(self):
+		dense_layer_1 = self.Q1_dense_layer_1(self.states_actions_batch)
 		dense_layer_2 = self.Q1_dense_layer_2(dense_layer_1)
 		Q1_s_a_value = self.Q1_s_a_output_value(dense_layer_2)
 		return Q1_s_a_value
 
-	def get_Q2_a_s_batch(self, states_actions_batch):
-		dense_layer_1 = self.Q2_dense_layer_1(states_actions_batch)
+	def get_Q2_a_s_batch(self):
+		dense_layer_1 = self.Q2_dense_layer_1(self.states_actions_batch)
 		dense_layer_2 = self.Q2_dense_layer_2(dense_layer_1)
 		Q2_s_a_value = self.Q2_s_a_output_value(dense_layer_2)
 		return Q2_s_a_value
 
-	def get_states_actions_batch(self, states_n_batch, actions_n_batch):
-		state_action_batch = tf.concat([states_n_batch, actions_n_batch], axis = 1)
-		return state_action_batch
+	def update_states_actions_batch(self, states_n_batch, actions_n_batch):
+		self.states_actions_batch = tf.concat([states_n_batch, actions_n_batch], axis = 1)
 
 	def get_target_Q(self, rewards, gamma, alpha, next_actions):
-		min_Q1_Q2_batch = self.get_min_Q1_Q2_batch()
-		target_Q = rewards + gamma * (min_Q1_Q2_batch - alpha * tf.math.log(next_actions))
+		self.define_min_Q1_Q2_batch()
+		rewards = rewards.reshape(len(rewards), 1)
+		# TODO: define right target_Q
+		# target_Q = rewards + gamma * (self.min_Q1_Q2_batch - alpha * tf.math.log(next_actions))
 		return target_Q
+
+	def update_layer_weights(self, layer, learning_rate, loss_grad):
+		layer.trainable_weights = layer.trainable_weights - learning_rate * loss_grad
 
 if __name__ == "__main__":
 	test_state_t = {
