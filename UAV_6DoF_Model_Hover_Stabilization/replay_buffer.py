@@ -6,7 +6,9 @@
 
 from random import randint
 import pandas as pd
+import numpy as np
 import additional_functions as adf
+import tensorflow as tf
 
 class ReplayBuffer:
 	def __init__(self, buffer: pd.DataFrame, buffer_max_transition_vectors: int, batch_size: int):
@@ -35,10 +37,10 @@ class ReplayBuffer:
 
 	def get_transition_vector(self, state_t: dict, action_t: dict, reward_t: float, state_tp1: dict):
 		transition_vector = {"state_t": [], "action_t": [], "reward_t": [], "state_tp1": []}
-		transition_vector["state_t"].append(adf.get_values_list(state_t))
+		transition_vector["state_t"].append(adf.get_values_as_array(state_t))
 		transition_vector["action_t"].append(list(action_t.values()))
 		transition_vector["reward_t"].append(reward_t)
-		transition_vector["state_tp1"].append(adf.get_values_list(state_tp1))
+		transition_vector["state_tp1"].append(adf.get_values_as_array(state_tp1))
 
 		return pd.DataFrame(transition_vector)
 
@@ -46,10 +48,10 @@ class ReplayBuffer:
 		return self.buffer.sample(self.batch_size, axis = 0)
 
 	def get_states_actions_rewards_next_states(self, batch: pd.DataFrame):
-		states = batch["state_t"].values
-		actions = batch["action_t"].values
+		states = tf.convert_to_tensor([state for state in batch["state_t"].values])
+		actions = [action for action in batch["action_t"].values]
 		rewards = batch["reward_t"].values
-		next_states = batch["state_tp1"].values
+		next_states = tf.convert_to_tensor([next_state for next_state in batch["state_tp1"].values])
 		return states, actions, rewards, next_states
 
 	def generate_state_t(self):
