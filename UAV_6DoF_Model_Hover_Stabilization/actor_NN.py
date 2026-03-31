@@ -21,9 +21,9 @@ class Actor(tf.keras.Model):
 		self.action_t_batch = {}
 
 	def get_action(self, state_t: dict):
-		state_t_array = np.array([adf.get_values_list(state_t)])
-		action_t_as_batch = self.get_actions_n_batch(state_t_array)
-		action_vector = self.get_action_vector(action_t_as_batch)
+		state_t_array = np.array([adf.get_values_as_array(state_t)])
+		actions_n_batch = self.get_actions_n_batch(state_t_array)
+		action_vector = self.get_action_vector(actions_n_batch)
 		return {
 			"T_sum": action_vector[0],
 			"tau_x": action_vector[1],
@@ -39,9 +39,9 @@ class Actor(tf.keras.Model):
 			batch = self.replay_buffer.get_batch()
 			states_n_batch = self.get_states_n_batch(batch)
 			actions_n_batch = self.get_actions_n_batch(states_n_batch)
-			print(actions_n_batch)
+			# print(actions_n_batch)
 
-	def get_actions_n_batch(self, states_n_batch: np.array):
+	def get_actions_n_batch(self, states_n_batch: tf.Tensor):
 		mean_log_std_batches = self.get_mean_log_std_batches(states_n_batch)
 		mean_batch = self.get_mean_batch(mean_log_std_batches)
 		std_batch = self.get_std_batch(mean_log_std_batches)
