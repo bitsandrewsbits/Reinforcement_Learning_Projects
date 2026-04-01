@@ -7,6 +7,7 @@ import replay_buffer as rb
 import actor_NN as act
 import critic_NNs as crit
 import tensorflow as tf
+from tensorflow.keras.optimizers import Adam
 
 class FPV_Hover_Stabilization_Simulation:
 	def __init__(self, uav_model_env, replay_buffer, actor, critic, learning_rate, steps_in_episode: int, episodes: int):
@@ -20,6 +21,7 @@ class FPV_Hover_Stabilization_Simulation:
 		self.gamma = self.uav_model_env.discount_gamma
 		self.alpha = 0.2
 		self.learning_rate = learning_rate
+		self.critic_optimizer = Adam(self.learning_rate)
 
 	def start_simulations(self):
 		for _ in range(self.episodes):
@@ -31,23 +33,21 @@ class FPV_Hover_Stabilization_Simulation:
 			# 	print("[WARN] Early episode termination...")
 			# 	break
 			if step % self.update_actor_critic_NNs_period_in_steps == 0:
-				print("[INFO] Updating critic NNs...")
 				buffer_batch = self.replay_buffer.get_batch()
 				states, actions, rewards, next_states = self.replay_buffer.get_states_actions_rewards_next_states(buffer_batch)
 				
-				self.critic.update_states_actions_batch(states, actions)
+				states_actions_batch = self.critic.get_states_actions_batch(states, actions)
 				next_actions = self.actor.get_actions_n_batch(next_states)
-				
-				# TODO: think, how to compute target_Q correctly
-				target_Q = self.critic.get_target_Q(rewards, self.gamma, self.alpha, next_actions)
-				print("target_Q:", target_Q)
-				critic_loss = self.critic.get_critic_loss(target_Q)
-				self.update_critic_layers_weights(critic_loss)
+				# TODO: finish NN for Actor via Model
+				log_actions_batch_probabilities = self.actor.get_log_probabilities()
+				self.update_critic_Q1_Q2_trainable_weights(
+					states_actions_batch, rewards, log_actions_batch_probabilities
+				)
 
 				actions = self.actor.get_actions_n_batch(states)
 				states_actions_batch = self.critic.get_states_actions_batch(states, actions)
-				self.critic.define_min_Q1_Q2_batch(states_actions_batch)
-				actor_loss = self.alpha * tf.math.log(actions) - self.critic.min_Q1_Q2_batch
+				# self.critic.define_min_Q1_Q2_batch(states_actions_batch)
+				# actor_loss = self.alpha * tf.math.log(actions) - self.critic.min_Q1_Q2_batch
 
 			current_state = self.uav_model_env.current_state_vector
 			action_t = self.actor.get_action(current_state)
@@ -60,26 +60,19 @@ class FPV_Hover_Stabilization_Simulation:
 		print("Replay Buffer records transition_vectors:")
 		print(self.replay_buffer.buffer)
 
-	def update_critic_layers_weights(self, loss):
-		loss_grad_for_Q1_dense1 = self.get_loss_grad_by_layer_weights(loss, tf.convert_to_tensor(self.critic.Q1_dense_layer_1.trainable_weights))
-		print(loss_grad_for_Q1_dense1)
-		loss_grad_for_Q1_dense2 = self.get_loss_grad_by_layer_weights(loss, tf.convert_to_tensor(self.critic.Q1_dense_layer_2.trainable_weights))
-		print(loss_grad_for_Q1_dense2)
-		loss_grad_for_Q2_dense1 = self.get_loss_grad_by_layer_weights(loss, tf.convert_to_tensor(self.critic.Q2_dense_layer_1.trainable_weights))
-		print(loss_grad_for_Q2_dense1)
-		loss_grad_for_Q2_dense2 = self.get_loss_grad_by_layer_weights(loss, tf.convert_to_tensor(self.critic.Q2_dense_layer_2.trainable_weights))
-		print(loss_grad_for_Q2_dense2)
+	def update_critic_Q1_Q2_trainable_weights(self, states_actions_batch, rewards_batch, log_actions_batch_probabilities):
+		print("===>Updating Critic Q1, Q2 trainable weights...")
+		with tf.GradientTape() as grad:
+			grad.watch(self.critic.trainable_variables)
 
-		self.critic.update_layer_weights(self.critic.Q1_dense_layer_1, self.learning_rate, loss_grad_for_Q1_dense1)
-		self.critic.update_layer_weights(self.critic.Q1_dense_layer_2, self.learning_rate, loss_grad_for_Q1_dense2)
-		self.critic.update_layer_weights(self.critic.Q2_dense_layer_1, self.learning_rate, loss_grad_for_Q2_dense1)
-		self.critic.update_layer_weights(self.critic.Q2_dense_layer_2, self.learning_rate, loss_grad_for_Q2_dense2)
-
-	def get_loss_grad_by_layer_weights(self, loss, layer_weights: tf.Tensor):
-		with tf.GradientTape() as loss_grad:
-			loss_grad.watch(layer_weights)
-			loss_grad = loss_grad.gradient(loss, layers_weights)
-			return loss_grad
+			Q1_batch, Q2_batch = self.critic(states_actions_batch)
+			min_Q1_Q2 = tf.math.minimum(Q1_batch, Q2_batch)
+			rewards = rewards_batch.reshape(len(rewards_batch), 1)
+			target_Q = rewards + self.gamma * (min_Q1_Q2 - self.alpha * log_actions_batch_probabilities)
+			critic_loss = (Q1_batch - target_Q) ** 2 + (Q2_batch - target_Q) ** 2
+			loss_grad = grad.gradient(critic_loss, self.critic.trainable_variables)
+			self.critic_optimizer.apply(loss_grad, self.critic.trainable_variables)
+		print("[INFO] DONE!")
 
 if __name__ == "__main__":
 	UAV_model_environment = uavme.UAV_6DoF_Model_Environment(
