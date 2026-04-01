@@ -18,6 +18,10 @@ class Actor(tf.keras.Model):
 		self.mean_batch = Dense(4)
 		self.log_std_batch = Dense(4)
 
+		self.means_tensor = tf.Tensor()
+		self.stds_tensor = tf.Tensor()
+		self.mean_std_noise_batch = 0
+
 		self.action_t_batch = {}
 
 	def get_action(self, state_t: dict):
@@ -42,29 +46,39 @@ class Actor(tf.keras.Model):
 			# print(actions_n_batch)
 
 	def get_actions_n_batch(self, states_n_batch: tf.Tensor):
-		mean_log_std_batches = self.get_mean_log_std_batches(states_n_batch)
-		mean_batch = self.get_mean_batch(mean_log_std_batches)
-		std_batch = self.get_std_batch(mean_log_std_batches)
-		normal_noise = tf.random.normal(mean_batch.shape)
-		actions_n_batch = tf.tanh(mean_batch + std_batch * normal_noise)
+		self.define_mean_log_std_batches(states_n_batch)
+		self.stds_tensor = self.get_std_batch(self.log_stds_tensor)
+		normal_noise = tf.random.normal(self.means_tensor.shape)
+		self.mean_std_noise_batch = self.means_tensor + self.stds_tensor * normal_noise
+		actions_n_batch = tf.tanh(self.mean_std_noise_batch)
 		
 		return actions_n_batch
 		
 	def get_mean_batch(self, mean_log_std_batches):
 		return mean_log_std_batches[0]
 
-	def get_std_batch(self, mean_log_std_batches):
-		log_std_batch = mean_log_std_batches[1]
-		log_std_batch = tf.clip_by_value(log_std_batch, -10, 2)
+	def get_std_batch(self, log_stds_tensor):
+		log_std_batch = tf.clip_by_value(log_stds_tensor, -10, 2)
 		return tf.exp(log_std_batch)
 
-	def get_mean_log_std_batches(self, states_n_batch: np.array):
+	def define_mean_log_std_batches(self, states_n_batch: np.array):
 		dense_1 = self.dense_layer_1(states_n_batch)
 		dense_2 = self.dense_layer_2(dense_1)
-		mean_batch = self.mean_batch(dense_2)
-		log_std_batch = self.log_std_batch(mean_batch)
+		self.means_tensor = self.mean_batch(dense_2)
+		self.log_stds_tensor = self.log_std_batch(dense_2)
 
-		return mean_batch, log_std_batch
+	def get_log_probabilities(self):
+		log_probabilities = -0.5 * (
+			((self.mean_std_noise_batch - self.means_tensor) / (self.stds_tensor + 1e-8)) ** 2 + \
+			2 * self.log_stds_tensor + np.log(2 * np.pi)
+		)
+		log_probabilities = tf.reduce_sum(log_probabilities, axis = 1, keepdims = True)
+		log_probabilities -= tf.reduce_sum(
+		    tf.math.log(1 - tf.tanh(self.mean_std_noise_batch) ** 2 + 1e-6),
+		    axis = 1,
+		    keepdims = True
+		)
+		return log_probabilities
 
 	def get_states_n_batch(self, batch: pd.DataFrame):
 		return np.array(list(batch["state_t"].values))
