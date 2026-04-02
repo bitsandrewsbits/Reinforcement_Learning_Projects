@@ -10,6 +10,7 @@ import additional_functions as adf
 
 class Actor(tf.keras.Model):
 	def __init__(self, replay_buffer):
+		super().__init__()
 		self.replay_buffer = replay_buffer
 		self.state = {}
 
@@ -24,9 +25,18 @@ class Actor(tf.keras.Model):
 
 		self.action_t_batch = {}
 
+	def call(self, states_n_batch):
+		dense_1 = self.dense_layer_1(states_n_batch)
+		dense_2 = self.dense_layer_2(dense_1)
+		self.means_tensor = self.mean_batch(dense_2)
+		self.log_stds_tensor = self.log_std_batch(dense_2)
+
+		return self.means_tensor, self.log_stds_tensor
+
 	def get_action(self, state_t: dict):
 		state_t_array = np.array([adf.get_values_as_array(state_t)])
-		actions_n_batch = self.get_actions_n_batch(state_t_array)
+		self.call(state_t_array)
+		actions_n_batch = self.get_actions_n_batch()
 		action_vector = self.get_action_vector(actions_n_batch)
 		return {
 			"T_sum": action_vector[0],
@@ -45,8 +55,7 @@ class Actor(tf.keras.Model):
 			actions_n_batch = self.get_actions_n_batch(states_n_batch)
 			# print(actions_n_batch)
 
-	def get_actions_n_batch(self, states_n_batch: tf.Tensor):
-		self.define_mean_log_std_batches(states_n_batch)
+	def get_actions_n_batch(self):
 		self.stds_tensor = self.get_std_batch(self.log_stds_tensor)
 		normal_noise = tf.random.normal(self.means_tensor.shape)
 		self.mean_std_noise_batch = self.means_tensor + self.stds_tensor * normal_noise
@@ -60,12 +69,6 @@ class Actor(tf.keras.Model):
 	def get_std_batch(self, log_stds_tensor):
 		log_std_batch = tf.clip_by_value(log_stds_tensor, -10, 2)
 		return tf.exp(log_std_batch)
-
-	def define_mean_log_std_batches(self, states_n_batch: np.array):
-		dense_1 = self.dense_layer_1(states_n_batch)
-		dense_2 = self.dense_layer_2(dense_1)
-		self.means_tensor = self.mean_batch(dense_2)
-		self.log_stds_tensor = self.log_std_batch(dense_2)
 
 	def get_log_probabilities(self):
 		log_probabilities = -0.5 * (
