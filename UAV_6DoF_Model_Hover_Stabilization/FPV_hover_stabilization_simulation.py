@@ -9,6 +9,10 @@ import critic_NNs as crit
 import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
 
+# TODO: For now, I see two problems:
+# 1) I set hover_time in 2 sec, but in reward function it's not using(!)
+# 2) If I will have early episode termination, how to create transition vectors batch if buffer is small for batch?
+
 class FPV_Hover_Stabilization_Simulation:
 	def __init__(self, uav_model_env, replay_buffer, actor, critic, learning_rate, steps_in_episode: int, episodes: int):
 		self.uav_model_env = uav_model_env
@@ -22,6 +26,7 @@ class FPV_Hover_Stabilization_Simulation:
 		self.alpha = 0.2
 		self.learning_rate = learning_rate
 		self.critic_optimizer = Adam(self.learning_rate)
+		self.actor_optimizer = Adam(self.learning_rate)
 
 	def start_simulations(self):
 		for _ in range(self.episodes):
@@ -37,17 +42,12 @@ class FPV_Hover_Stabilization_Simulation:
 				states, actions, rewards, next_states = self.replay_buffer.get_states_actions_rewards_next_states(buffer_batch)
 				
 				states_actions_batch = self.critic.get_states_actions_batch(states, actions)
-				next_actions = self.actor.get_actions_n_batch(next_states)
-				# TODO: finish NN for Actor via Model
+				next_actions = self.actor(next_states)
 				log_actions_batch_probabilities = self.actor.get_log_probabilities()
 				self.update_critic_Q1_Q2_trainable_weights(
 					states_actions_batch, rewards, log_actions_batch_probabilities
 				)
-
-				actions = self.actor.get_actions_n_batch(states)
-				states_actions_batch = self.critic.get_states_actions_batch(states, actions)
-				# self.critic.define_min_Q1_Q2_batch(states_actions_batch)
-				# actor_loss = self.alpha * tf.math.log(actions) - self.critic.min_Q1_Q2_batch
+				self.update_actor_trainable_weights(states, actions)
 
 			current_state = self.uav_model_env.current_state_vector
 			action_t = self.actor.get_action(current_state)
@@ -61,9 +61,11 @@ class FPV_Hover_Stabilization_Simulation:
 		print(self.replay_buffer.buffer)
 
 	def update_critic_Q1_Q2_trainable_weights(self, states_actions_batch, rewards_batch, log_actions_batch_probabilities):
-		print("===>Updating Critic Q1, Q2 trainable weights...")
+		self.critic(states_actions_batch)
+		print("[INFO]===>Updating Critic Q1, Q2 trainable weights...")
 		with tf.GradientTape() as grad:
-			grad.watch(self.critic.trainable_variables)
+			train_vars = [tf.convert_to_tensor(layer_weights) for layer_weights in self.critic.trainable_variables]
+			grad.watch(train_vars)
 
 			Q1_batch, Q2_batch = self.critic(states_actions_batch)
 			min_Q1_Q2 = tf.math.minimum(Q1_batch, Q2_batch)
@@ -72,6 +74,22 @@ class FPV_Hover_Stabilization_Simulation:
 			critic_loss = (Q1_batch - target_Q) ** 2 + (Q2_batch - target_Q) ** 2
 			loss_grad = grad.gradient(critic_loss, self.critic.trainable_variables)
 			self.critic_optimizer.apply(loss_grad, self.critic.trainable_variables)
+		print("[INFO] DONE!")
+
+	def update_actor_trainable_weights(self, states_n_batch, actions_n_batch):
+		states_actions_batch = self.critic.get_states_actions_batch(states_n_batch, actions_n_batch)
+		Q1, Q2 = self.critic(states_actions_batch)
+		min_Q1_Q2_batch = tf.math.minimum(Q1, Q2)
+		print("[INFO]===>Updating Actor trainable weights...")
+		with tf.GradientTape() as grad:
+			train_vars = [tf.convert_to_tensor(layer_weights) for layer_weights in self.actor.trainable_variables]
+			grad.watch(train_vars)
+			
+			means_batch, log_stds_batch = self.actor(states_n_batch)
+			log_actions_batch_probabilities = self.actor.get_log_probabilities()
+			actor_loss = self.alpha * log_actions_batch_probabilities - min_Q1_Q2_batch
+			loss_grad = grad.gradient(actor_loss, self.actor.trainable_variables)
+			self.actor_optimizer.apply(loss_grad, self.actor.trainable_variables)
 		print("[INFO] DONE!")
 
 if __name__ == "__main__":
