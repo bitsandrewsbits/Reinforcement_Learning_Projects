@@ -1,22 +1,28 @@
 # main simulation class with SAC algorithm
 
+
 import numpy as np
 import pandas as pd
+import tensorflow as tf
+from tensorflow.keras.optimizers import Adam
+
 import UAV_6DoF_model_environment as uavme
 import replay_buffer as rb
 import actor_NN as act
 import critic_NNs as crit
-import tensorflow as tf
-from tensorflow.keras.optimizers import Adam
+import additional_functions as adf
 
 # TODO: For now, I see two problems:
 # 1) I set hover_time in 2 sec, but in reward function it's not using(!)
 # 2) If I will have early episode termination, how to create transition vectors batch if buffer is small for batch?
 
 class FPV_Hover_Stabilization_Simulation:
-	def __init__(self, uav_model_env, replay_buffer, actor, critic, learning_rate, steps_in_episode: int, episodes: int):
+	def __init__(self, uav_model_env, train_replay_buffer, actor, critic, learning_rate, steps_in_episode: int, episodes: int):
+		self.train_replay_buffer = train_replay_buffer
+		self.episodes_replay_buffers = []
+		self.current_episode_buffer = object
+
 		self.uav_model_env = uav_model_env
-		self.replay_buffer = replay_buffer
 		self.actor = actor
 		self.critic = critic
 		self.steps_in_episode = steps_in_episode
@@ -28,16 +34,26 @@ class FPV_Hover_Stabilization_Simulation:
 		self.critic_optimizer = Adam(self.learning_rate)
 		self.actor_optimizer = Adam(self.learning_rate)
 
-	def start_simulations(self):
-		for _ in range(self.episodes):
-			pass
+	def main(self, simulation_dir_path = "test_FPV_6DoF_simulation"):
+		if simulation_dir_path in os.listdir('.'):
+			print(f"[INFO] Simulation dir <{simulation_dir_path}> already exists!")
+		else:
+			print(f"[INFO] Creating dir <{simulation_dir_path}> for new simulation.")
+			os.mkdir(simulation_dir_path)
 
-	def start_simulation(self):
-		for step in range(1, self.steps_in_episode + 1):
-			# if self.uav_model_env.early_episode_termination:
-			# 	print("[WARN] Early episode termination...")
-			# 	break
-			if step % self.update_actor_critic_NNs_period_in_steps == 0:
+		for i in range(1, self.episodes + 1):
+			self.current_episode_buffer = rb.ReplayBuffer(self.episode_steps, 32)
+			print(f"[INFO] Start episode #{i}...", end = '')
+			self.start_simulation()
+			print("DONE!")
+		adf.save_buffer_to_JSONL(self.train_replay_buffer, "Train_Buffer.jsonl")
+
+	def start_simulation(self, episode_number: int):
+		for step_i in range(self.steps_in_episode):
+			if self.uav_model_env.early_episode_termination:
+				print("[WARN] Early episode termination...")
+				break
+			if step_i % self.update_actor_critic_NNs_period_in_steps == 0 and step_i != 0:
 				buffer_batch = self.replay_buffer.get_batch()
 				states, actions, rewards, next_states = self.replay_buffer.get_states_actions_rewards_next_states(buffer_batch)
 				
@@ -55,14 +71,13 @@ class FPV_Hover_Stabilization_Simulation:
 			transition_vector = self.replay_buffer.get_transition_vector(
 				current_state, action_t, reward_t, next_state
 			)
-			self.replay_buffer.add_transition_vector_to_buffer(transition_vector)
-		print("Simulation is finished!")
-		print("Replay Buffer records transition_vectors:")
-		print(self.replay_buffer.buffer)
+			self.train_replay_buffer.update_buffer_with_new_transition_vector(transition_vector, step_i)
+			self.current_episode_buffer.add_transition_vector_to_buffer(transition_vector, step_i)
+			adf.save_buffer_to_JSONL(self.current_episode_buffer, f"Buffer_for_Episode-{episode_number}.jsonl")
 
 	def update_critic_Q1_Q2_trainable_weights(self, states_actions_batch, rewards_batch, log_actions_batch_probabilities):
 		self.critic(states_actions_batch)
-		print("[INFO]===>Updating Critic Q1, Q2 trainable weights...")
+		print("[INFO]===>Updating Critic Q1, Q2 trainable weights...", end = '')
 		with tf.GradientTape() as grad:
 			train_vars = [tf.convert_to_tensor(layer_weights) for layer_weights in self.critic.trainable_variables]
 			grad.watch(train_vars)
@@ -74,13 +89,13 @@ class FPV_Hover_Stabilization_Simulation:
 			critic_loss = (Q1_batch - target_Q) ** 2 + (Q2_batch - target_Q) ** 2
 			loss_grad = grad.gradient(critic_loss, self.critic.trainable_variables)
 			self.critic_optimizer.apply(loss_grad, self.critic.trainable_variables)
-		print("[INFO] DONE!")
+		print("DONE!")
 
 	def update_actor_trainable_weights(self, states_n_batch, actions_n_batch):
 		states_actions_batch = self.critic.get_states_actions_batch(states_n_batch, actions_n_batch)
 		Q1, Q2 = self.critic(states_actions_batch)
 		min_Q1_Q2_batch = tf.math.minimum(Q1, Q2)
-		print("[INFO]===>Updating Actor trainable weights...")
+		print("[INFO]===>Updating Actor trainable weights...", end = '')
 		with tf.GradientTape() as grad:
 			train_vars = [tf.convert_to_tensor(layer_weights) for layer_weights in self.actor.trainable_variables]
 			grad.watch(train_vars)
@@ -90,7 +105,7 @@ class FPV_Hover_Stabilization_Simulation:
 			actor_loss = self.alpha * log_actions_batch_probabilities - min_Q1_Q2_batch
 			loss_grad = grad.gradient(actor_loss, self.actor.trainable_variables)
 			self.actor_optimizer.apply(loss_grad, self.actor.trainable_variables)
-		print("[INFO] DONE!")
+		print("DONE!")
 
 if __name__ == "__main__":
 	UAV_model_environment = uavme.UAV_6DoF_Model_Environment(
@@ -105,14 +120,12 @@ if __name__ == "__main__":
 		},
 		0.5, 2, 1000, test_mode = True
 	)
-	episode_steps = 10
-	replay_buffer = rb.ReplayBuffer(
-		pd.DataFrame({"state_t": [], "action_t": [], "reward_t": [], "state_tp1": []}),
-		episode_steps, 3
-	)
+	episode_steps = 500
+	batch_size = 32
+	replay_buffer = rb.ReplayBuffer(episode_steps, batch_size)
 	actor = act.Actor(replay_buffer)
 	critic = crit.Critic()
 	fpv_hover_simulation = FPV_Hover_Stabilization_Simulation(
 		UAV_model_environment, replay_buffer, actor, critic, 0.02, episode_steps, 2
 	)
-	fpv_hover_simulation.start_simulation()
+	fpv_hover_simulation.main()
