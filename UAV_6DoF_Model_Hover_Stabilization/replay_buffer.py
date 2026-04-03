@@ -11,9 +11,9 @@ import additional_functions as adf
 import tensorflow as tf
 
 class ReplayBuffer:
-	def __init__(self, buffer: pd.DataFrame, buffer_max_transition_vectors: int, batch_size: int):
+	def __init__(self, buffer_max_transition_vectors: int, batch_size: int):
 		self.buffer_max_transition_vectors = buffer_max_transition_vectors
-		self.buffer = buffer
+		self.buffer = pd.DataFrame({"state_t": [], "action_t": [], "reward_t": [], "state_tp1": []})
 		self.batch_size = batch_size
 
 	def test_buffer_on_random_vectors(self):
@@ -32,8 +32,18 @@ class ReplayBuffer:
 			print("Separated vectors:")
 			states, actions, rewards, next_states = self.get_states_actions_rewards_next_states(batch)
 
-	def add_transition_vector_to_buffer(self, transition_vector: pd.DataFrame):
-		self.buffer = pd.concat([self.buffer, transition_vector], ignore_index = True)
+	def add_transition_vector_to_buffer(self, transition_vector: pd.DataFrame, episode_step: int):
+		if episode_step < self.buffer_max_transition_vectors:
+			self.buffer = pd.concat([self.buffer, transition_vector], ignore_index = True)
+		else:
+			print("[WARN] Reach max size of buffer!")
+
+	def update_buffer_with_new_transition_vector(self, transition_vector: pd.DataFrame, episode_step: int)
+		if episode_step < self.buffer_max_transition_vectors:
+			self.buffer = pd.concat([self.buffer, transition_vector], ignore_index = True)
+		else:
+			updated_index = episode_step % self.buffer_max_transition_vectors
+			self.buffer.loc[updated_index] = transition_vector
 
 	def get_transition_vector(self, state_t: dict, action_t: dict, reward_t: float, state_tp1: dict):
 		transition_vector = {"state_t": [], "action_t": [], "reward_t": [], "state_tp1": []}
@@ -82,9 +92,6 @@ class ReplayBuffer:
 		return state_tp1
 
 if __name__ == "__main__":
-	buffer = ReplayBuffer(
-		pd.DataFrame({"state_t": [], "action_t": [], "reward_t": [], "state_tp1": []}),
-		25, 3
-	)
+	buffer = ReplayBuffer(25, 3)
 	buffer.test_buffer_on_random_vectors()
 	buffer.test_buffer_batch_getting()
