@@ -38,11 +38,12 @@ class Actor(tf.keras.Model):
 		self.call(state_t_array)
 		actions_n_batch = self.get_actions_n_batch()
 		action_vector = self.get_action_vector(actions_n_batch)
+		actions_arr = tf.keras.ops.convert_to_numpy(action_vector)
 		return {
-			"T_sum": action_vector[0],
-			"tau_x": action_vector[1],
-			"tau_y": action_vector[2],
-			"tau_z": action_vector[3]
+			"T_sum": actions_arr[0],
+			"tau_x": actions_arr[1],
+			"tau_y": actions_arr[2],
+			"tau_z": actions_arr[3]
 		}
 
 	def get_action_vector(self, action_t_batch: tf.Tensor):
