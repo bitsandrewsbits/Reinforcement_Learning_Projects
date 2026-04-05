@@ -1,6 +1,6 @@
 # main simulation class with SAC algorithm
 
-
+import os
 import numpy as np
 import pandas as pd
 import tensorflow as tf
@@ -17,45 +17,50 @@ import additional_functions as adf
 # 2) If I will have early episode termination, how to create transition vectors batch if buffer is small for batch?
 
 class FPV_Hover_Stabilization_Simulation:
-	def __init__(self, uav_model_env, train_replay_buffer, actor, critic, learning_rate, steps_in_episode: int, episodes: int):
-		self.train_replay_buffer = train_replay_buffer
-		self.episodes_replay_buffers = []
+	def __init__(self, uav_model_env, buffer_batch_size: int, learning_rate, steps_in_episode: int, 
+episodes: int, simulations_dir: str):
+		self.steps_in_episode = steps_in_episode
+		self.episodes = episodes
+		self.buffer_batch_size = buffer_batch_size
+		self.train_replay_buffer = rb.ReplayBuffer(steps_in_episode, self.buffer_batch_size)
 		self.current_episode_buffer = object
 
 		self.uav_model_env = uav_model_env
-		self.actor = actor
-		self.critic = critic
-		self.steps_in_episode = steps_in_episode
-		self.episodes = episodes
-		self.update_actor_critic_NNs_period_in_steps = 4
+		self.actor = act.Actor(self.train_replay_buffer)
+		self.critic = crit.Critic()
+		self.update_actor_critic_NNs_period_in_steps = 10
 		self.gamma = self.uav_model_env.discount_gamma
 		self.alpha = 0.2
 		self.learning_rate = learning_rate
 		self.critic_optimizer = Adam(self.learning_rate)
 		self.actor_optimizer = Adam(self.learning_rate)
 
-	def main(self, simulation_dir_path = "test_FPV_6DoF_simulation"):
-		if simulation_dir_path in os.listdir('.'):
-			print(f"[INFO] Simulation dir <{simulation_dir_path}> already exists!")
+		self.simulations_dir = simulations_dir
+
+	def main(self):
+		if self.simulations_dir in os.listdir('.'):
+			print(f"[INFO] Simulation dir <{self.simulations_dir}> already exists!")
 		else:
-			print(f"[INFO] Creating dir <{simulation_dir_path}> for new simulation.")
-			os.mkdir(simulation_dir_path)
+			print(f"[INFO] Creating dir <{self.simulations_dir}> for new simulation.")
+			os.mkdir(self.simulations_dir)
 
 		for i in range(1, self.episodes + 1):
-			self.current_episode_buffer = rb.ReplayBuffer(self.episode_steps, 32)
+			self.current_episode_buffer = rb.ReplayBuffer(self.steps_in_episode, 32)
+			self.uav_model_env.reset_environment()
 			print(f"[INFO] Start episode #{i}...", end = '')
-			self.start_simulation()
+			self.start_simulation(i)
 			print("DONE!")
-		adf.save_buffer_to_JSONL(self.train_replay_buffer, "Train_Buffer.jsonl")
+		adf.save_buffer_to_JSONL(self.train_replay_buffer.buffer, f"{self.simulations_dir}/Train_Buffer.jsonl")
 
 	def start_simulation(self, episode_number: int):
 		for step_i in range(self.steps_in_episode):
 			if self.uav_model_env.early_episode_termination:
 				print("[WARN] Early episode termination...")
 				break
-			if step_i % self.update_actor_critic_NNs_period_in_steps == 0 and step_i != 0:
-				buffer_batch = self.replay_buffer.get_batch()
-				states, actions, rewards, next_states = self.replay_buffer.get_states_actions_rewards_next_states(buffer_batch)
+			train_buffer_size = self.train_replay_buffer.buffer.shape[0]
+			if step_i % self.update_actor_critic_NNs_period_in_steps == 0 and train_buffer_size >= self.buffer_batch_size:
+				buffer_batch = self.train_replay_buffer.get_batch()
+				states, actions, rewards, next_states = self.train_replay_buffer.get_states_actions_rewards_next_states(buffer_batch)
 				
 				states_actions_batch = self.critic.get_states_actions_batch(states, actions)
 				next_actions = self.actor(next_states)
@@ -68,12 +73,14 @@ class FPV_Hover_Stabilization_Simulation:
 			current_state = self.uav_model_env.current_state_vector
 			action_t = self.actor.get_action(current_state)
 			next_state, reward_t = self.uav_model_env.step(action_t)
-			transition_vector = self.replay_buffer.get_transition_vector(
+			transition_vector = self.train_replay_buffer.get_transition_vector(
 				current_state, action_t, reward_t, next_state
 			)
 			self.train_replay_buffer.update_buffer_with_new_transition_vector(transition_vector, step_i)
 			self.current_episode_buffer.add_transition_vector_to_buffer(transition_vector, step_i)
-			adf.save_buffer_to_JSONL(self.current_episode_buffer, f"Buffer_for_Episode-{episode_number}.jsonl")
+		print("=" * 30)
+		print(self.current_episode_buffer.buffer)
+		adf.save_buffer_to_JSONL(self.current_episode_buffer.buffer, f"{self.simulations_dir}/Buffer_for_Episode-{episode_number}.jsonl")
 
 	def update_critic_Q1_Q2_trainable_weights(self, states_actions_batch, rewards_batch, log_actions_batch_probabilities):
 		self.critic(states_actions_batch)
@@ -121,11 +128,9 @@ if __name__ == "__main__":
 		0.5, 2, 1000, test_mode = True
 	)
 	episode_steps = 500
-	batch_size = 32
-	replay_buffer = rb.ReplayBuffer(episode_steps, batch_size)
-	actor = act.Actor(replay_buffer)
-	critic = crit.Critic()
+	buffer_batch_size = 32
 	fpv_hover_simulation = FPV_Hover_Stabilization_Simulation(
-		UAV_model_environment, replay_buffer, actor, critic, 0.02, episode_steps, 2
+		UAV_model_environment, buffer_batch_size, 0.02, episode_steps, 30,
+		"6DoF_hover_stabilization_simulations"
 	)
 	fpv_hover_simulation.main()
