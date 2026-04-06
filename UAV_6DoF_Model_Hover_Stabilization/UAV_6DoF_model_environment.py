@@ -2,6 +2,7 @@
 import numpy as np
 import pandas as pd
 import random
+import global_vars as gv
 
 class UAV_6DoF_Model_Environment:
 	def __init__(self, discount_gamma, reward_coefs: dict, 
@@ -10,6 +11,7 @@ class UAV_6DoF_Model_Environment:
 	simulation_steps: int, test_mode = False):
 		self.discount_gamma = discount_gamma
 		self.reward_coefs = reward_coefs
+		self.epsilon = 0.01
 		self.delta_t_in_sec = 0.01
 		self.init_state_vector = init_state_vector
 		self.current_state_vector = init_state_vector
@@ -229,7 +231,9 @@ class UAV_6DoF_Model_Environment:
 		current_state_vector_reward = -self.reward_coefs["alpha"] * p_vector_deviation_from_target ** 2 -\
 		self.reward_coefs["beta"] * v_vector_by_module ** 2 - self.reward_coefs["gamma"] * omega_vector_by_module ** 2 -\
 		self.reward_coefs["delta"] * action_vector_by_module ** 2
-		return current_state_vector_reward 
+		if p_vector_deviation_from_target < self.epsilon:
+			current_state_vector_reward += 1
+		return current_state_vector_reward
 
 	def get_vector_deviation_by_module(self, vector: str):
 		vector_deviation_from_target = 0
@@ -256,6 +260,13 @@ class UAV_6DoF_Model_Environment:
 		self.p_vector_component_episode_logs["x"].append(self.current_state_vector["p"][0])
 		self.p_vector_component_episode_logs["y"].append(self.current_state_vector["p"][1])
 		self.p_vector_component_episode_logs["z"].append(self.current_state_vector["p"][2])
+
+	def save_episode_p_vectors_to_JSONL(self, episode_number: int):
+		logs_dataset = pd.DataFrame(self.p_vector_component_episode_logs)
+		logs_dataset.to_json(
+			f"{gv.P_VECTORS_IN_TIME_DIR_PATH}/p_vectors_in_time(episode-{episode_number})", 
+			orient = 'records', lines = True
+		)
 
 	def show_logs(self):
 		logs_dataset = pd.DataFrame(self.p_vector_component_episode_logs)
