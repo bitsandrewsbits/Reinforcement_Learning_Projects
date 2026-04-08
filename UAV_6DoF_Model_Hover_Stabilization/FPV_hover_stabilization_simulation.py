@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
+import time
 
 import UAV_6DoF_model_environment as uavme
 import replay_buffer as rb
@@ -33,7 +34,10 @@ episodes: int):
 		self.critic_optimizer = Adam(self.learning_rate)
 		self.actor_optimizer = Adam(self.learning_rate)
 
+		self.total_simulations_time = 0
+
 	def main(self):
+		start_time = time.time()
 		for i in range(1, self.episodes + 1):
 			self.current_episode_buffer = rb.ReplayBuffer(self.steps_in_episode, 32)
 			self.uav_model_env.reset_environment()
@@ -42,6 +46,9 @@ episodes: int):
 			self.uav_model_env.save_episode_p_vectors_to_JSONL(i)
 			print("DONE!")
 		adf.save_buffer_to_JSONL(self.train_replay_buffer.buffer, f"{gv.REPLAY_BUFFERS_DIR_PATH}/Train_Buffer.jsonl")
+		end_time = time.time()
+		self.total_simulations_time = end_time - start_time
+		print(f"[INFO] Total simulations time in sec = {self.total_simulations_time}")
 
 	def start_simulation(self, episode_number: int):
 		for step_i in range(self.steps_in_episode):
@@ -64,7 +71,7 @@ episodes: int):
 
 			current_state = self.uav_model_env.current_state_vector
 			action_t = self.actor.get_action(current_state)
-			action_t["T_sum"] = (action_t["T_sum"] + 1) * self.uav_model_env.UAV_mass_in_kg * 9.8
+			action_t["T_sum"] = (action_t["T_sum"] + 1.5) * self.uav_model_env.UAV_mass_in_kg * 9.8
 			next_state, reward_t = self.uav_model_env.step(action_t)
 			transition_vector = self.train_replay_buffer.get_transition_vector(
 				current_state, action_t, reward_t, next_state
@@ -114,7 +121,7 @@ episodes: int):
 
 if __name__ == "__main__":
 	UAV_model_environment = uavme.UAV_6DoF_Model_Environment(
-		0.99, {"alpha": 2.8, "beta": 0.5, "gamma": 1.2, "delta": 1.4},
+		0.99, {"alpha_xy": 0.5, "alpha_z": 200, "beta": 0.1, "gamma": 0.1, "delta": 0.0001},
 		{
 			"p": np.array([0, 0, 0]), "v": np.array([0, 0, 0]),
 			"q": np.array([1, 0, 0, 0]), "omega": np.array([0, 0, 0])
@@ -123,11 +130,11 @@ if __name__ == "__main__":
 			"p": {"x": ["min_x", "max_x"], "y": ["min_y", "max_y"], "z": [0, "max_height"]}, 
 			"q": {"q1": [-0.7, 0.7], "q2": [-0.7, 0.7]}, "T_sum": [0, "max_T_sum"]
 		},
-		0.5, 2, 1000, test_mode = True
+		0.5, 2, 1000
 	)
-	episode_steps = 500
+	episode_steps = 1000
 	buffer_batch_size = 32
 	fpv_hover_simulation = FPV_Hover_Stabilization_Simulation(
-		UAV_model_environment, buffer_batch_size, 0.02, episode_steps, 60
+		UAV_model_environment, buffer_batch_size, 0.00001, episode_steps, 500
 	)
 	fpv_hover_simulation.main()
