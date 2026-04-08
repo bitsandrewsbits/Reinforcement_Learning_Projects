@@ -14,11 +14,22 @@ def save_buffer_to_JSONL(df: pd.DataFrame, file_path: str):
 	df.to_json(file_path, orient = 'records', lines = True)
 
 def create_dir_if_need(dir_path):
-	if dir_path in os.listdir('.'):
-		print(f"[INFO] Dir <{dir_path}> already exists!")
+	dir_path_elems = dir_path.split('/')
+	path_levels = len(dir_path_elems)
+	if path_levels == 1:
+		if dir_path in os.listdir('.'):
+			print(f"[INFO] Dir <{dir_path}> already exists!")
+		else:
+			print(f"[INFO] Creating dir <{dir_path}>...")
+			os.mkdir(dir_path)
 	else:
-		print(f"[INFO] Creating dir <{dir_path}>...")
-		os.mkdir(dir_path)
+		target_dir = dir_path_elems[-1]
+		target_search_dir_path = '/'.join(dir_path_elems[:-1])
+		if target_dir in os.listdir(target_search_dir_path):
+			print(f"[INFO] Dir <{target_dir}> already exists!")
+		else:
+			print(f"[INFO] Creating dir <{target_dir}>...")
+			os.mkdir(dir_path)
 
 if __name__ == "__main__":
 	d1 = {"a": [0, 1], "b": [4, 6]}
