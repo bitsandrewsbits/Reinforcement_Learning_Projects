@@ -8,10 +8,12 @@ class UAV_6DoF_Model_Environment:
 	def __init__(self, discount_gamma, reward_coefs: dict, 
 	init_state_vector: dict, state_space_restrictions: dict, 
 	hover_stabilization_height_in_m, hover_time_in_sec: int,
-	simulation_steps: int, test_mode = False):
+	simulation_steps: int):
 		self.discount_gamma = discount_gamma
 		self.reward_coefs = reward_coefs
-		self.epsilon = 0.01
+		self.hover_extra_reward = 10
+		self.reward_crash_penalty = 10 ** 3
+		self.epsilon = 0.05
 		self.delta_t_in_sec = 0.01
 		self.init_state_vector = init_state_vector
 		self.current_state_vector = init_state_vector
@@ -38,6 +40,10 @@ class UAV_6DoF_Model_Environment:
 			self.init_state_vector["p"][1],
 			self.hover_stabilization_height_in_m
 		]
+		self.hover_action_components = {
+			"T_sum": self.UAV_mass_in_kg * 9.8,
+			"tau_x": 0.0, "tau_y": 0.0, "tau_z": 0.0
+		}
 		self.update_state_space_restrictions()
 		self.current_state_vector_reward = 0
 		self.hover_time_in_sec = hover_time_in_sec
@@ -46,7 +52,6 @@ class UAV_6DoF_Model_Environment:
 		self.current_step = 0
 		self.simulation_steps = simulation_steps
 		self.p_vector_component_episode_logs = {"time_in_sec": [], "x": [], "y": [], "z": []}
-		self.test_mode = test_mode
 
 	def start_test_simulation(self):
 		self.update_state_space_restrictions()
@@ -73,6 +78,7 @@ class UAV_6DoF_Model_Environment:
 		
 		self.make_next_state_vector_as_current()
 		self.reset_next_state_vector()
+		self.current_step += 1
 
 		return next_state_vector, current_state_vector_reward
 
@@ -150,7 +156,7 @@ class UAV_6DoF_Model_Environment:
 			self.state_space_restrictions["p"][p_component] = [
 				-coeff * self.hover_stabilization_height_in_m, coeff * self.hover_stabilization_height_in_m
 			]
-		self.state_space_restrictions["p"]["z"] = [0, self.z_coeff_for_max_height * self.hover_stabilization_height_in_m]
+		self.state_space_restrictions["p"]["z"] = [-0.2, self.z_coeff_for_max_height * self.hover_stabilization_height_in_m]
 		self.state_space_restrictions["T_sum"] = [0, 2 * self.UAV_mass_in_kg * 9.8]
 
 	def update_thrust_force_F_b_t(self):
@@ -223,21 +229,26 @@ class UAV_6DoF_Model_Environment:
 		return inertia_moment_J
 
 	def get_reward_for_current_state_vector(self):
-		p_vector_deviation_from_target = self.get_vector_deviation_by_module("p")
+		xy_deviation_from_target = self.get_vector_deviation_by_module("p", [0, 1])
+		z_deviation_from_target = self.get_vector_deviation_by_module("p", [2])
 		v_vector_by_module = self.get_vector_by_module("v")
 		omega_vector_by_module = self.get_vector_by_module("omega")
-		action_vector_by_module = self.get_action_vector_by_module()
+		action_deviation_by_module = self.get_action_deviation_by_module()
 		
-		current_state_vector_reward = -self.reward_coefs["alpha"] * p_vector_deviation_from_target ** 2 -\
-		self.reward_coefs["beta"] * v_vector_by_module ** 2 - self.reward_coefs["gamma"] * omega_vector_by_module ** 2 -\
-		self.reward_coefs["delta"] * action_vector_by_module ** 2
-		if p_vector_deviation_from_target < self.epsilon:
-			current_state_vector_reward += 1
+		current_state_vector_reward = -self.reward_coefs["alpha_xy"] * xy_deviation_from_target ** 2 -\
+		self.reward_coefs["alpha_z"] * z_deviation_from_target ** 2 - self.reward_coefs["beta"] * v_vector_by_module ** 2 -\
+		self.reward_coefs["gamma"] * omega_vector_by_module ** 2 -\
+		self.reward_coefs["delta"] * action_deviation_by_module ** 2
+		if z_deviation_from_target < self.epsilon:
+			current_state_vector_reward += self.hover_extra_reward
+		if self.current_state_vector["p"][2] <= 0:
+			current_state_vector_reward -= self.reward_crash_penalty
+
 		return current_state_vector_reward
 
-	def get_vector_deviation_by_module(self, vector: str):
+	def get_vector_deviation_by_module(self, vector: str, components_indexes: list[int]):
 		vector_deviation_from_target = 0
-		for (i, current_vector_component_value) in enumerate(self.current_state_vector[vector]):
+		for i in components_indexes:
 			vector_deviation_from_target += (
 				self.current_state_vector[vector][i] - self.target_p_components_for_hover_stabilization_in_m[i]
 			) ** 2
@@ -249,11 +260,13 @@ class UAV_6DoF_Model_Environment:
 			vector_by_module += self.current_state_vector[vector][i] ** 2
 		return np.sqrt(vector_by_module)
 
-	def get_action_vector_by_module(self):
-		action_vector_by_module = 0
-		for vector_component_value in self.action_space_values.values():
-			action_vector_by_module += vector_component_value ** 2
-		return np.sqrt(action_vector_by_module)
+	def get_action_deviation_by_module(self):
+		action_deviation_by_module = 0
+		for action_component in self.action_space_values:
+			action_deviation_by_module += (
+				self.action_space_values[action_component] - self.hover_action_components[action_component]
+			) ** 2
+		return np.sqrt(action_deviation_by_module)
 
 	def log_p_vector_components_at_current_step(self):
 		self.p_vector_component_episode_logs["time_in_sec"].append(self.current_step * self.delta_t_in_sec)
@@ -264,7 +277,7 @@ class UAV_6DoF_Model_Environment:
 	def save_episode_p_vectors_to_JSONL(self, episode_number: int):
 		logs_dataset = pd.DataFrame(self.p_vector_component_episode_logs)
 		logs_dataset.to_json(
-			f"{gv.P_VECTORS_IN_TIME_DIR_PATH}/p_vectors_in_time(episode-{episode_number})", 
+			f"{gv.P_VECTORS_IN_TIME_DIR_PATH}/p_vectors_in_time(episode-{episode_number})",
 			orient = 'records', lines = True
 		)
 
@@ -281,7 +294,7 @@ class UAV_6DoF_Model_Environment:
 
 if __name__ == "__main__":
 	UAV_model_environment = UAV_6DoF_Model_Environment(
-		0.99, {"alpha": 2.8, "beta": 0.5, "gamma": 1.2, "delta": 1.4},
+		0.99, {"alpha_xy": 0.3, "alpha_z": 5, "beta": 0.5, "gamma": 1.2, "delta": 2},
 		{
 			"p": np.array([0, 0, 0]), "v": np.array([0, 0, 0]),
 			"q": np.array([1, 0, 0, 0]), "omega": np.array([0, 0, 0])
@@ -290,6 +303,6 @@ if __name__ == "__main__":
 			"p": {"x": ["min_x", "max_x"], "y": ["min_y", "max_y"], "z": [0, "max_height"]}, 
 			"q": {"q1": [-0.7, 0.7], "q2": [-0.7, 0.7]}, "T_sum": [0, "max_T_sum"]
 		},
-		0.5, 2, 1000, test_mode = True
+		0.5, 2, 1000
 	)
 	UAV_model_environment.start_test_simulation()
