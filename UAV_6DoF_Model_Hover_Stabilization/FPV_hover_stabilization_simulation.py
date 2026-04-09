@@ -133,8 +133,8 @@ if __name__ == "__main__":
 		0.5, 2, 1000
 	)
 	episode_steps = 1000
-	buffer_batch_size = 32
+	buffer_batch_size = 64
 	fpv_hover_simulation = FPV_Hover_Stabilization_Simulation(
-		UAV_model_environment, buffer_batch_size, 0.00001, episode_steps, 500
+		UAV_model_environment, buffer_batch_size, 5 * 10 ** (-5), episode_steps, 1000
 	)
 	fpv_hover_simulation.main()
