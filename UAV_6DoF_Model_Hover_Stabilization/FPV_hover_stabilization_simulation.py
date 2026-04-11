@@ -23,6 +23,8 @@ episodes: int):
 		self.buffer_batch_size = buffer_batch_size
 		self.train_replay_buffer = rb.ReplayBuffer(steps_in_episode, self.buffer_batch_size)
 		self.current_episode_buffer = object
+		self.total_passed_steps = 0
+		self.passed_steps_amount_before_learning = 10 ** 3
 
 		self.uav_model_env = uav_model_env
 		self.actor = act.Actor(self.train_replay_buffer)
@@ -35,6 +37,7 @@ episodes: int):
 		self.actor_optimizer = Adam(self.learning_rate)
 
 		self.total_simulations_time = 0
+		self.replay_buffer_filename_pattern = gv.REPLAY_BUFFERS_FILENAME_PATTERN
 
 	def main(self):
 		start_time = time.time()
@@ -43,12 +46,12 @@ episodes: int):
 			self.uav_model_env.reset_environment()
 			print(f"[INFO] Start episode #{i}...", end = '')
 			self.start_simulation(i)
-			self.uav_model_env.save_episode_p_vectors_to_JSONL(i)
 			print("DONE!")
 		adf.save_buffer_to_JSONL(self.train_replay_buffer.buffer, f"{gv.REPLAY_BUFFERS_DIR_PATH}/Train_Buffer.jsonl")
 		end_time = time.time()
 		self.total_simulations_time = end_time - start_time
 		print(f"[INFO] Total simulations time in sec = {self.total_simulations_time}")
+		print(f"[INFO] Total passed steps = {self.total_passed_steps}")
 
 	def start_simulation(self, episode_number: int):
 		for step_i in range(self.steps_in_episode):
@@ -56,7 +59,7 @@ episodes: int):
 				print("[WARN] Early episode termination...")
 				break
 			train_buffer_size = self.train_replay_buffer.buffer.shape[0]
-			if step_i % self.update_actor_critic_NNs_period_in_steps == 0 and train_buffer_size >= self.buffer_batch_size:
+			if self.total_passed_steps > self.passed_steps_amount_before_learning and step_i % self.update_actor_critic_NNs_period_in_steps == 0:
 				buffer_batch = self.train_replay_buffer.get_batch()
 				states, actions, rewards, next_states = self.train_replay_buffer.get_states_actions_rewards_next_states(buffer_batch)
 				next_states = tf.cast(next_states, tf.float32)
@@ -78,9 +81,12 @@ episodes: int):
 			)
 			self.train_replay_buffer.update_buffer_with_new_transition_vector(transition_vector, step_i)
 			self.current_episode_buffer.add_transition_vector_to_buffer(transition_vector, step_i)
+			self.total_passed_steps += 1
 		print("=" * 30)
 		print(self.current_episode_buffer.buffer)
-		adf.save_buffer_to_JSONL(self.current_episode_buffer.buffer, f"{gv.REPLAY_BUFFERS_DIR_PATH}/Buffer_for_Episode-{episode_number}.jsonl")
+		current_episode_buffer_path = f"{gv.REPLAY_BUFFERS_DIR_PATH}/{self.replay_buffer_filename_pattern}{episode_number}.jsonl"
+		adf.save_buffer_to_JSONL(self.current_episode_buffer.buffer, current_episode_buffer_path)
+		self.uav_model_env.save_episode_p_vectors_to_JSONL(episode_number)
 
 	def update_critic_Q1_Q2_trainable_weights(self, next_states_actions_batch, rewards_batch, log_actions_batch_probabilities):
 		self.critic(next_states_actions_batch)
@@ -120,8 +126,9 @@ episodes: int):
 			adf.create_dir_if_need(sim_dir)
 
 if __name__ == "__main__":
+	episode_steps = 1000
 	UAV_model_environment = uavme.UAV_6DoF_Model_Environment(
-		0.99, {"alpha_xy": 0.5, "alpha_z": 200, "beta": 0.1, "gamma": 0.1, "delta": 0.0001},
+		0.99, {"alpha_xy": 0.5, "alpha_z": 50, "beta": 0.1, "gamma": 0.1, "delta": 0.0001},
 		{
 			"p": np.array([0, 0, 0]), "v": np.array([0, 0, 0]),
 			"q": np.array([1, 0, 0, 0]), "omega": np.array([0, 0, 0])
@@ -130,11 +137,10 @@ if __name__ == "__main__":
 			"p": {"x": ["min_x", "max_x"], "y": ["min_y", "max_y"], "z": [0, "max_height"]}, 
 			"q": {"q1": [-0.7, 0.7], "q2": [-0.7, 0.7]}, "T_sum": [0, "max_T_sum"]
 		},
-		0.5, 2, 1000
+		0.5, 2, episode_steps
 	)
-	episode_steps = 1000
-	buffer_batch_size = 64
+	buffer_batch_size = 32
 	fpv_hover_simulation = FPV_Hover_Stabilization_Simulation(
-		UAV_model_environment, buffer_batch_size, 5 * 10 ** (-5), episode_steps, 1000
+		UAV_model_environment, buffer_batch_size, 1 * 10 ** (-6), episode_steps, 300
 	)
 	fpv_hover_simulation.main()
