@@ -11,7 +11,7 @@ class UAV_6DoF_Model_Environment:
 	simulation_steps: int):
 		self.discount_gamma = discount_gamma
 		self.reward_coefs = reward_coefs
-		self.hover_extra_reward = 10
+		self.hover_extra_reward = 10 ** 3
 		self.reward_crash_penalty = 10 ** 3
 		self.epsilon = 0.05
 		self.delta_t_in_sec = 0.01
@@ -52,6 +52,7 @@ class UAV_6DoF_Model_Environment:
 		self.current_step = 0
 		self.simulation_steps = simulation_steps
 		self.p_vector_component_episode_logs = {"time_in_sec": [], "x": [], "y": [], "z": []}
+		self.p_vectors_filename_pattern = gv.P_VECTORS_FILENAME_PATTERN
 
 	def start_test_simulation(self):
 		self.update_state_space_restrictions()
@@ -277,7 +278,7 @@ class UAV_6DoF_Model_Environment:
 	def save_episode_p_vectors_to_JSONL(self, episode_number: int):
 		logs_dataset = pd.DataFrame(self.p_vector_component_episode_logs)
 		logs_dataset.to_json(
-			f"{gv.P_VECTORS_IN_TIME_DIR_PATH}/p_vectors_in_time(episode-{episode_number})",
+			f"{gv.P_VECTORS_IN_TIME_DIR_PATH}/{self.p_vectors_filename_pattern}{episode_number}.jsonl",
 			orient = 'records', lines = True
 		)
 
