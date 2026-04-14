@@ -38,12 +38,12 @@ class ReplayBuffer:
 		else:
 			print("[WARN] Reach max size of buffer!")
 
-	def update_buffer_with_new_transition_vector(self, transition_vector: pd.DataFrame, episode_step: int):
-		if episode_step < self.buffer_max_transition_vectors:
+	def update_buffer_with_new_transition_vector(self, transition_vector: pd.DataFrame, passed_steps: int):
+		if passed_steps < self.buffer_max_transition_vectors:
 			self.buffer = pd.concat([self.buffer, transition_vector], ignore_index = True)
 		else:
-			updated_index = episode_step % self.buffer_max_transition_vectors
-			self.buffer.loc[updated_index] = transition_vector
+			updated_index = passed_steps % self.buffer_max_transition_vectors
+			self.buffer.loc[updated_index] = transition_vector.loc[0]
 
 	def get_transition_vector(self, state_t: dict, action_t: dict, reward_t: float, state_tp1: dict):
 		transition_vector = {"state_t": [], "action_t": [], "reward_t": [], "state_tp1": []}
