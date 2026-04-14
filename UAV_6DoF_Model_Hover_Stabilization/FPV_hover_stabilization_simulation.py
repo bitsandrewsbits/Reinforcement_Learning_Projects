@@ -15,26 +15,28 @@ import additional_functions as adf
 import global_vars as gv
 
 class FPV_Hover_Stabilization_Simulation:
-	def __init__(self, uav_model_env, buffer_batch_size: int, learning_rate, steps_in_episode: int, 
+	def __init__(self, uav_model_env, buffer_batch_size: int, steps_in_episode: int, 
 episodes: int):
 		self.create_dirs_for_simulations()
 		self.steps_in_episode = steps_in_episode
 		self.episodes = episodes
 		self.buffer_batch_size = buffer_batch_size
-		self.train_replay_buffer = rb.ReplayBuffer(steps_in_episode, self.buffer_batch_size)
+		self.passed_steps_amount_before_learning = 5 * 10 ** 3
+		self.train_replay_buffer = rb.ReplayBuffer(self.passed_steps_amount_before_learning, self.buffer_batch_size)
 		self.current_episode_buffer = object
 		self.total_passed_steps = 0
-		self.passed_steps_amount_before_learning = 10 ** 3
 
 		self.uav_model_env = uav_model_env
 		self.actor = act.Actor(self.train_replay_buffer)
 		self.critic = crit.Critic()
-		self.update_actor_critic_NNs_period_in_steps = 10
+		self.update_critic_NNs_period_in_steps = 2
+		self.update_actor_NN_period_in_steps = 4
 		self.gamma = self.uav_model_env.discount_gamma
 		self.alpha = 0.2
-		self.learning_rate = learning_rate
-		self.critic_optimizer = Adam(self.learning_rate)
-		self.actor_optimizer = Adam(self.learning_rate)
+		self.actor_learning_rate = 1 * 10 ** (-4)
+		self.critic_learning_rate = 2 * 10 ** (-4)
+		self.critic_optimizer = Adam(self.critic_learning_rate)
+		self.actor_optimizer = Adam(self.actor_learning_rate)
 
 		self.total_simulations_time = 0
 		self.replay_buffer_filename_pattern = gv.REPLAY_BUFFERS_FILENAME_PATTERN
@@ -59,18 +61,21 @@ episodes: int):
 				print("[WARN] Early episode termination...")
 				break
 			train_buffer_size = self.train_replay_buffer.buffer.shape[0]
-			if self.total_passed_steps > self.passed_steps_amount_before_learning and step_i % self.update_actor_critic_NNs_period_in_steps == 0:
+			if self.total_passed_steps > self.passed_steps_amount_before_learning:
 				buffer_batch = self.train_replay_buffer.get_batch()
 				states, actions, rewards, next_states = self.train_replay_buffer.get_states_actions_rewards_next_states(buffer_batch)
-				next_states = tf.cast(next_states, tf.float32)
-				self.actor(next_states)
-				next_actions = self.actor.get_actions_n_batch()
-				log_actions_batch_probabilities = self.actor.get_log_probabilities()
-				next_states_actions_batch = self.critic.get_states_actions_batch(next_states, next_actions)
-				self.update_critic_Q1_Q2_trainable_weights(
-					next_states_actions_batch, rewards, log_actions_batch_probabilities
-				)
-				self.update_actor_trainable_weights(states, actions)
+				
+				if step_i % self.update_critic_NNs_period_in_steps == 0:
+					next_states = tf.cast(next_states, tf.float32)
+					self.actor(next_states)
+					next_actions = self.actor.get_actions_n_batch()
+					log_actions_batch_probabilities = self.actor.get_log_probabilities()
+					next_states_actions_batch = self.critic.get_states_actions_batch(next_states, next_actions)
+					self.update_critic_Q1_Q2_trainable_weights(
+						next_states_actions_batch, rewards, log_actions_batch_probabilities
+					)
+				if step_i % self.update_actor_NN_period_in_steps == 0:
+					self.update_actor_trainable_weights(states, actions)
 
 			current_state = self.uav_model_env.current_state_vector
 			action_t = self.actor.get_action(current_state)
@@ -79,7 +84,7 @@ episodes: int):
 			transition_vector = self.train_replay_buffer.get_transition_vector(
 				current_state, action_t, reward_t, next_state
 			)
-			self.train_replay_buffer.update_buffer_with_new_transition_vector(transition_vector, step_i)
+			self.train_replay_buffer.update_buffer_with_new_transition_vector(transition_vector, self.total_passed_steps)
 			self.current_episode_buffer.add_transition_vector_to_buffer(transition_vector, step_i)
 			self.total_passed_steps += 1
 		print("=" * 30)
@@ -128,7 +133,7 @@ episodes: int):
 if __name__ == "__main__":
 	episode_steps = 1000
 	UAV_model_environment = uavme.UAV_6DoF_Model_Environment(
-		0.99, {"alpha_xy": 0.5, "alpha_z": 50, "beta": 0.1, "gamma": 0.1, "delta": 0.0001},
+		0.99, {"alpha_xy": 0.5, "alpha_z": 10, "beta": 0.1, "gamma": 0.1, "delta": 10 ** (-5)},
 		{
 			"p": np.array([0, 0, 0]), "v": np.array([0, 0, 0]),
 			"q": np.array([1, 0, 0, 0]), "omega": np.array([0, 0, 0])
@@ -139,8 +144,8 @@ if __name__ == "__main__":
 		},
 		0.5, 2, episode_steps
 	)
-	buffer_batch_size = 32
+	buffer_batch_size = 128
 	fpv_hover_simulation = FPV_Hover_Stabilization_Simulation(
-		UAV_model_environment, buffer_batch_size, 1 * 10 ** (-6), episode_steps, 300
+		UAV_model_environment, buffer_batch_size, episode_steps, 500
 	)
 	fpv_hover_simulation.main()
