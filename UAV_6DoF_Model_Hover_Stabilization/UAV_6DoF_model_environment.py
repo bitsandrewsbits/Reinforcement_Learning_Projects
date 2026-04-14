@@ -11,9 +11,10 @@ class UAV_6DoF_Model_Environment:
 	simulation_steps: int):
 		self.discount_gamma = discount_gamma
 		self.reward_coefs = reward_coefs
-		self.hover_extra_reward = 10 ** 3
-		self.reward_crash_penalty = 10 ** 3
-		self.epsilon = 0.05
+		self.hover_extra_reward = 9
+		self.survival_reward = 5
+		self.reward_crash_penalty = 10
+		self.epsilon = 0.1
 		self.delta_t_in_sec = 0.01
 		self.init_state_vector = init_state_vector
 		self.current_state_vector = init_state_vector
@@ -240,10 +241,12 @@ class UAV_6DoF_Model_Environment:
 		self.reward_coefs["alpha_z"] * z_deviation_from_target ** 2 - self.reward_coefs["beta"] * v_vector_by_module ** 2 -\
 		self.reward_coefs["gamma"] * omega_vector_by_module ** 2 -\
 		self.reward_coefs["delta"] * action_deviation_by_module ** 2
-		if z_deviation_from_target < self.epsilon:
-			current_state_vector_reward += self.hover_extra_reward
-		if self.current_state_vector["p"][2] <= 0:
+		if self.current_state_vector["p"][2] > 0:
+			current_state_vector_reward += self.survival_reward
+		elif self.current_state_vector["p"][2] <= 0:
 			current_state_vector_reward -= self.reward_crash_penalty
+		elif z_deviation_from_target <= self.epsilon:
+			current_state_vector_reward += self.hover_extra_reward
 
 		return current_state_vector_reward
 
