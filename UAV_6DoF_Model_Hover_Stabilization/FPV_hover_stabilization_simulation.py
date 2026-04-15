@@ -21,8 +21,9 @@ episodes: int):
 		self.steps_in_episode = steps_in_episode
 		self.episodes = episodes
 		self.buffer_batch_size = buffer_batch_size
-		self.passed_steps_amount_before_learning = 5 * 10 ** 3
-		self.train_replay_buffer = rb.ReplayBuffer(self.passed_steps_amount_before_learning, self.buffer_batch_size)
+		self.passed_steps_amount_before_learning = 10 ** 4
+		self.train_buffer_size = 10 ** 5
+		self.train_replay_buffer = rb.ReplayBuffer(self.train_buffer_size, self.buffer_batch_size)
 		self.current_episode_buffer = object
 		self.total_passed_steps = 0
 
@@ -34,7 +35,7 @@ episodes: int):
 		self.gamma = self.uav_model_env.discount_gamma
 		self.alpha = 0.2
 		self.actor_learning_rate = 1 * 10 ** (-4)
-		self.critic_learning_rate = 2 * 10 ** (-4)
+		self.critic_learning_rate = 3 * 10 ** (-4)
 		self.critic_optimizer = Adam(self.critic_learning_rate)
 		self.actor_optimizer = Adam(self.actor_learning_rate)
 
@@ -46,9 +47,7 @@ episodes: int):
 		for i in range(1, self.episodes + 1):
 			self.current_episode_buffer = rb.ReplayBuffer(self.steps_in_episode, 32)
 			self.uav_model_env.reset_environment()
-			print(f"[INFO] Start episode #{i}...", end = '')
 			self.start_simulation(i)
-			print("DONE!")
 		adf.save_buffer_to_JSONL(self.train_replay_buffer.buffer, f"{gv.REPLAY_BUFFERS_DIR_PATH}/Train_Buffer.jsonl")
 		end_time = time.time()
 		self.total_simulations_time = end_time - start_time
@@ -58,7 +57,6 @@ episodes: int):
 	def start_simulation(self, episode_number: int):
 		for step_i in range(self.steps_in_episode):
 			if self.uav_model_env.early_episode_termination:
-				print("[WARN] Early episode termination...")
 				break
 			train_buffer_size = self.train_replay_buffer.buffer.shape[0]
 			if self.total_passed_steps > self.passed_steps_amount_before_learning:
@@ -87,15 +85,12 @@ episodes: int):
 			self.train_replay_buffer.update_buffer_with_new_transition_vector(transition_vector, self.total_passed_steps)
 			self.current_episode_buffer.add_transition_vector_to_buffer(transition_vector, step_i)
 			self.total_passed_steps += 1
-		print("=" * 30)
-		print(self.current_episode_buffer.buffer)
 		current_episode_buffer_path = f"{gv.REPLAY_BUFFERS_DIR_PATH}/{self.replay_buffer_filename_pattern}{episode_number}.jsonl"
 		adf.save_buffer_to_JSONL(self.current_episode_buffer.buffer, current_episode_buffer_path)
 		self.uav_model_env.save_episode_p_vectors_to_JSONL(episode_number)
 
 	def update_critic_Q1_Q2_trainable_weights(self, next_states_actions_batch, rewards_batch, log_actions_batch_probabilities):
 		self.critic(next_states_actions_batch)
-		print("[INFO]===>Updating Critic Q1, Q2 trainable weights...", end = '')
 		with tf.GradientTape() as grad:
 			train_vars = [tf.convert_to_tensor(layer_weights) for layer_weights in self.critic.trainable_variables]
 			grad.watch(train_vars)
@@ -107,13 +102,11 @@ episodes: int):
 			critic_loss = (Q1_batch - target_Q) ** 2 + (Q2_batch - target_Q) ** 2
 			loss_grad = grad.gradient(critic_loss, self.critic.trainable_variables)
 			self.critic_optimizer.apply_gradients(zip(loss_grad, self.critic.trainable_variables))
-		print("DONE!")
 
 	def update_actor_trainable_weights(self, states_n_batch, actions_n_batch):
 		states_actions_batch = self.critic.get_states_actions_batch(states_n_batch, actions_n_batch)
 		Q1, Q2 = self.critic(states_actions_batch)
 		min_Q1_Q2_batch = tf.math.minimum(Q1, Q2)
-		print("[INFO]===>Updating Actor trainable weights...", end = '')
 		with tf.GradientTape() as grad:
 			train_vars = [tf.convert_to_tensor(layer_weights) for layer_weights in self.actor.trainable_variables]
 			grad.watch(train_vars)
@@ -123,7 +116,6 @@ episodes: int):
 			actor_loss = self.alpha * log_actions_batch_probabilities - min_Q1_Q2_batch
 			loss_grad = grad.gradient(actor_loss, self.actor.trainable_variables)
 			self.actor_optimizer.apply_gradients(zip(loss_grad, self.actor.trainable_variables))
-		print("DONE!")
 
 	def create_dirs_for_simulations(self):
 		simulations_data_dirs = [gv.SIMULATION_DIR, gv.P_VECTORS_IN_TIME_DIR_PATH, gv.REPLAY_BUFFERS_DIR_PATH]
@@ -133,7 +125,7 @@ episodes: int):
 if __name__ == "__main__":
 	episode_steps = 1000
 	UAV_model_environment = uavme.UAV_6DoF_Model_Environment(
-		0.99, {"alpha_xy": 0.5, "alpha_z": 10, "beta": 0.1, "gamma": 0.1, "delta": 10 ** (-5)},
+		0.99, {"alpha_xy": 0.05, "alpha_z": 20, "beta": 0.1, "gamma": 0.1, "delta": 10 ** (-5)},
 		{
 			"p": np.array([0, 0, 0]), "v": np.array([0, 0, 0]),
 			"q": np.array([1, 0, 0, 0]), "omega": np.array([0, 0, 0])
@@ -146,6 +138,6 @@ if __name__ == "__main__":
 	)
 	buffer_batch_size = 128
 	fpv_hover_simulation = FPV_Hover_Stabilization_Simulation(
-		UAV_model_environment, buffer_batch_size, episode_steps, 500
+		UAV_model_environment, buffer_batch_size, episode_steps, 600
 	)
 	fpv_hover_simulation.main()
