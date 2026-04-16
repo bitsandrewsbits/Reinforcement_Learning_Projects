@@ -21,15 +21,16 @@ episodes: int):
 		self.steps_in_episode = steps_in_episode
 		self.episodes = episodes
 		self.buffer_batch_size = buffer_batch_size
-		self.passed_steps_amount_before_learning = 10 ** 4
+		self.passed_steps_amount_before_learning = 5 * 10 ** 3
 		self.train_buffer_size = 10 ** 5
 		self.train_replay_buffer = rb.ReplayBuffer(self.train_buffer_size, self.buffer_batch_size)
 		self.current_episode_buffer = object
 		self.total_passed_steps = 0
-
 		self.uav_model_env = uav_model_env
 		self.actor = act.Actor(self.train_replay_buffer)
 		self.critic = crit.Critic()
+		self.target_critic = crit.Critic()
+		self.tau = 0.005
 		self.update_critic_NNs_period_in_steps = 2
 		self.update_actor_NN_period_in_steps = 4
 		self.gamma = self.uav_model_env.discount_gamma
@@ -38,6 +39,7 @@ episodes: int):
 		self.critic_learning_rate = 3 * 10 ** (-4)
 		self.critic_optimizer = Adam(self.critic_learning_rate)
 		self.actor_optimizer = Adam(self.actor_learning_rate)
+		self.init_critic_NNs_weights = True
 
 		self.total_simulations_time = 0
 		self.replay_buffer_filename_pattern = gv.REPLAY_BUFFERS_FILENAME_PATTERN
@@ -68,10 +70,15 @@ episodes: int):
 					self.actor(next_states)
 					next_actions = self.actor.get_actions_n_batch()
 					log_actions_batch_probabilities = self.actor.get_log_probabilities()
+					states_actions_batch = self.critic.get_states_actions_batch(states, actions)
 					next_states_actions_batch = self.critic.get_states_actions_batch(next_states, next_actions)
+					if self.init_critic_NNs_weights:
+						self.initialize_critic_NNs_target_critic_NNs_weights(states_actions_batch)
+						self.init_critic_NNs_weights = False
 					self.update_critic_Q1_Q2_trainable_weights(
-						next_states_actions_batch, rewards, log_actions_batch_probabilities
+						states_actions_batch, next_states_actions_batch, rewards, log_actions_batch_probabilities
 					)
+					self.update_target_critic_NNs_weights()
 				if step_i % self.update_actor_NN_period_in_steps == 0:
 					self.update_actor_trainable_weights(states, actions)
 
@@ -89,17 +96,18 @@ episodes: int):
 		adf.save_buffer_to_JSONL(self.current_episode_buffer.buffer, current_episode_buffer_path)
 		self.uav_model_env.save_episode_p_vectors_to_JSONL(episode_number)
 
-	def update_critic_Q1_Q2_trainable_weights(self, next_states_actions_batch, rewards_batch, log_actions_batch_probabilities):
-		self.critic(next_states_actions_batch)
+	def update_critic_Q1_Q2_trainable_weights(self, states_actions_batch, next_states_actions_batch, rewards_batch, log_actions_batch_probabilities):
 		with tf.GradientTape() as grad:
-			train_vars = [tf.convert_to_tensor(layer_weights) for layer_weights in self.critic.trainable_variables]
-			grad.watch(train_vars)
-
-			Q1_batch, Q2_batch = self.critic(next_states_actions_batch)
-			min_Q1_Q2 = tf.math.minimum(Q1_batch, Q2_batch)
+			Q1_batch, Q2_batch = self.critic(states_actions_batch)
+			target_Q1_batch, target_Q2_batch = self.target_critic(next_states_actions_batch)
+			min_target_Q1_Q2 = tf.math.minimum(target_Q1_batch, target_Q2_batch)
 			rewards = rewards_batch.reshape(len(rewards_batch), 1)
-			target_Q = rewards + self.gamma * (min_Q1_Q2 - self.alpha * log_actions_batch_probabilities)
-			critic_loss = (Q1_batch - target_Q) ** 2 + (Q2_batch - target_Q) ** 2
+			target_Q = tf.stop_gradient(
+				rewards + self.gamma * (min_target_Q1_Q2 - self.alpha * log_actions_batch_probabilities)
+			)
+			critic_loss = tf.math.reduce_mean(
+				(Q1_batch - target_Q) ** 2 + (Q2_batch - target_Q) ** 2
+			)
 			loss_grad = grad.gradient(critic_loss, self.critic.trainable_variables)
 			self.critic_optimizer.apply_gradients(zip(loss_grad, self.critic.trainable_variables))
 
@@ -108,14 +116,25 @@ episodes: int):
 		Q1, Q2 = self.critic(states_actions_batch)
 		min_Q1_Q2_batch = tf.math.minimum(Q1, Q2)
 		with tf.GradientTape() as grad:
-			train_vars = [tf.convert_to_tensor(layer_weights) for layer_weights in self.actor.trainable_variables]
-			grad.watch(train_vars)
-			
 			means_batch, log_stds_batch = self.actor(states_n_batch)
 			log_actions_batch_probabilities = self.actor.get_log_probabilities()
-			actor_loss = self.alpha * log_actions_batch_probabilities - min_Q1_Q2_batch
+			actor_loss = tf.math.reduce_mean(
+				self.alpha * log_actions_batch_probabilities - min_Q1_Q2_batch
+			)
 			loss_grad = grad.gradient(actor_loss, self.actor.trainable_variables)
 			self.actor_optimizer.apply_gradients(zip(loss_grad, self.actor.trainable_variables))
+
+	def initialize_critic_NNs_target_critic_NNs_weights(self, states_actions_batch):
+		self.critic(states_actions_batch)
+		self.target_critic(states_actions_batch)
+		for (target_critic_var, critic_var) in zip(self.target_critic.variables, self.critic.variables):
+			target_critic_var.assign(critic_var)
+
+	def update_target_critic_NNs_weights(self):
+		for (target_critic_var, critic_var) in zip(self.target_critic.variables, self.critic.variables):
+			target_critic_var.assign(
+				self.tau * critic_var + (1 - self.tau) * target_critic_var
+			)
 
 	def create_dirs_for_simulations(self):
 		simulations_data_dirs = [gv.SIMULATION_DIR, gv.P_VECTORS_IN_TIME_DIR_PATH, gv.REPLAY_BUFFERS_DIR_PATH]
@@ -125,7 +144,7 @@ episodes: int):
 if __name__ == "__main__":
 	episode_steps = 1000
 	UAV_model_environment = uavme.UAV_6DoF_Model_Environment(
-		0.99, {"alpha_xy": 0.05, "alpha_z": 20, "beta": 0.1, "gamma": 0.1, "delta": 10 ** (-5)},
+		0.99, {"alpha_xy": 0.5, "alpha_z": 20, "beta": 0.1, "gamma": 0.1, "delta": 10 ** (-5)},
 		{
 			"p": np.array([0, 0, 0]), "v": np.array([0, 0, 0]),
 			"q": np.array([1, 0, 0, 0]), "omega": np.array([0, 0, 0])
