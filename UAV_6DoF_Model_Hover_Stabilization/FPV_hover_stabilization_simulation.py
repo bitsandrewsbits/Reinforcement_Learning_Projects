@@ -84,7 +84,7 @@ episodes: int):
 
 			current_state = self.uav_model_env.current_state_vector
 			action_t = self.actor.get_action(current_state)
-			action_t["T_sum"] = (action_t["T_sum"] + 1.5) * self.uav_model_env.UAV_mass_in_kg * 9.8
+			action_t["T_sum"] = self.get_action_Tsum_in_hover_representation(action_t["T_sum"])
 			next_state, reward_t = self.uav_model_env.step(action_t)
 			transition_vector = self.train_replay_buffer.get_transition_vector(
 				current_state, action_t, reward_t, next_state
@@ -95,6 +95,10 @@ episodes: int):
 		current_episode_buffer_path = f"{gv.REPLAY_BUFFERS_DIR_PATH}/{self.replay_buffer_filename_pattern}{episode_number}.jsonl"
 		adf.save_buffer_to_JSONL(self.current_episode_buffer.buffer, current_episode_buffer_path)
 		self.uav_model_env.save_episode_p_vectors_to_JSONL(episode_number)
+
+	def get_action_Tsum_in_hover_representation(self, action_Tsum):
+		updated_Tsum = self.uav_model_env.hover_action_components["T_sum"] * (1.9 + action_Tsum)
+		return updated_Tsum
 
 	def update_critic_Q1_Q2_trainable_weights(self, states_actions_batch, next_states_actions_batch, rewards_batch, log_actions_batch_probabilities):
 		with tf.GradientTape() as grad:
@@ -144,7 +148,7 @@ episodes: int):
 if __name__ == "__main__":
 	episode_steps = 1000
 	UAV_model_environment = uavme.UAV_6DoF_Model_Environment(
-		0.99, {"alpha_xy": 0.5, "alpha_z": 20, "beta": 0.1, "gamma": 0.1, "delta": 10 ** (-5)},
+		0.99, {"alpha_xy": 10 ** (-2), "alpha_z": 10, "beta": 0.1, "gamma": 0.1, "delta": 10 ** (-4)},
 		{
 			"p": np.array([0, 0, 0]), "v": np.array([0, 0, 0]),
 			"q": np.array([1, 0, 0, 0]), "omega": np.array([0, 0, 0])
@@ -155,8 +159,8 @@ if __name__ == "__main__":
 		},
 		0.5, 2, episode_steps
 	)
-	buffer_batch_size = 128
+	buffer_batch_size = 256
 	fpv_hover_simulation = FPV_Hover_Stabilization_Simulation(
-		UAV_model_environment, buffer_batch_size, episode_steps, 600
+		UAV_model_environment, buffer_batch_size, episode_steps, 400
 	)
 	fpv_hover_simulation.main()
