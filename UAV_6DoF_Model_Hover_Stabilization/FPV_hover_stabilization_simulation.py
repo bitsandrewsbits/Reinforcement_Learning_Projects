@@ -21,7 +21,7 @@ episodes: int):
 		self.steps_in_episode = steps_in_episode
 		self.episodes = episodes
 		self.buffer_batch_size = buffer_batch_size
-		self.passed_steps_amount_before_learning = 5 * 10 ** 3
+		self.passed_steps_amount_before_learning = gv.PASSED_STEPS_BEFORE_LEARNING
 		self.train_buffer_size = 10 ** 5
 		self.train_replay_buffer = rb.ReplayBuffer(self.train_buffer_size, self.buffer_batch_size)
 		self.current_episode_buffer = object
@@ -84,20 +84,23 @@ episodes: int):
 
 			current_state = self.uav_model_env.current_state_vector
 			action_t = self.actor.get_action(current_state)
+			# print("Action Tsum before scaling:", action_t["T_sum"])
 			action_t["T_sum"] = self.get_action_Tsum_in_hover_representation(action_t["T_sum"])
 			next_state, reward_t = self.uav_model_env.step(action_t)
 			transition_vector = self.train_replay_buffer.get_transition_vector(
 				current_state, action_t, reward_t, next_state
 			)
+			self.total_passed_steps += 1
+			self.actor.update_total_passed_steps(self.total_passed_steps)
 			self.train_replay_buffer.update_buffer_with_new_transition_vector(transition_vector, self.total_passed_steps)
 			self.current_episode_buffer.add_transition_vector_to_buffer(transition_vector, step_i)
-			self.total_passed_steps += 1
 		current_episode_buffer_path = f"{gv.REPLAY_BUFFERS_DIR_PATH}/{self.replay_buffer_filename_pattern}{episode_number}.jsonl"
 		adf.save_buffer_to_JSONL(self.current_episode_buffer.buffer, current_episode_buffer_path)
 		self.uav_model_env.save_episode_p_vectors_to_JSONL(episode_number)
 
 	def get_action_Tsum_in_hover_representation(self, action_Tsum):
-		updated_Tsum = self.uav_model_env.hover_action_components["T_sum"] * (1.9 + action_Tsum)
+		updated_Tsum = self.uav_model_env.hover_action_components["T_sum"] * (1 + 0.4 * action_Tsum)
+
 		return updated_Tsum
 
 	def update_critic_Q1_Q2_trainable_weights(self, states_actions_batch, next_states_actions_batch, rewards_batch, log_actions_batch_probabilities):
@@ -148,19 +151,19 @@ episodes: int):
 if __name__ == "__main__":
 	episode_steps = 1000
 	UAV_model_environment = uavme.UAV_6DoF_Model_Environment(
-		0.99, {"alpha_xy": 10 ** (-2), "alpha_z": 10, "beta": 0.1, "gamma": 0.1, "delta": 10 ** (-4)},
+		0.99, {"alpha_xy": 10 ** (-2), "alpha_z": 10, "beta": 5, "gamma": 5, "delta": 10 ** (-6)},
 		{
 			"p": np.array([0, 0, 0]), "v": np.array([0, 0, 0]),
 			"q": np.array([1, 0, 0, 0]), "omega": np.array([0, 0, 0])
 		},
 		{
-			"p": {"x": ["min_x", "max_x"], "y": ["min_y", "max_y"], "z": [0, "max_height"]}, 
+			"p": {"x": ["min_x", "max_x"], "y": ["min_y", "max_y"], "z": [0, "max_height"]},
 			"q": {"q1": [-0.7, 0.7], "q2": [-0.7, 0.7]}, "T_sum": [0, "max_T_sum"]
 		},
 		0.5, 2, episode_steps
 	)
-	buffer_batch_size = 256
+	buffer_batch_size = 128
 	fpv_hover_simulation = FPV_Hover_Stabilization_Simulation(
-		UAV_model_environment, buffer_batch_size, episode_steps, 400
+		UAV_model_environment, buffer_batch_size, episode_steps, 1000
 	)
 	fpv_hover_simulation.main()
