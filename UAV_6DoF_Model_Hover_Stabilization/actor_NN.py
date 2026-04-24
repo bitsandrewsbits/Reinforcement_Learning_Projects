@@ -68,8 +68,9 @@ class Actor(tf.keras.Model):
 		return mean_log_std_batches[0]
 
 	def get_std_batch(self, log_stds_tensor):
-		log_std_batch = tf.clip_by_value(log_stds_tensor, -10, 2)
-		return tf.exp(log_std_batch)
+		max_std = 0.3
+		std_batch = tf.clip_by_value(tf.exp(log_stds_tensor), 0.05, max_std)
+		return std_batch
 
 	def get_log_probabilities(self):
 		log_probabilities = -0.5 * (
