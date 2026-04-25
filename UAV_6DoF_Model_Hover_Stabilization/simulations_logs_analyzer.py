@@ -9,15 +9,15 @@ matplotlib.use("qt5agg")
 import matplotlib.pyplot as plt
 
 import global_vars as gv
+import additional_functions as adf
 
 class Simulations_Logs_Analyzer:
 	def __init__(self, replay_buffers_dir_path: str, p_vectors_dir_path: str):
 		self.replay_buffers_dir_path = replay_buffers_dir_path
 		self.p_vectors_files_dir_path = p_vectors_dir_path
-		self.p_vectors_files_amount = len(os.listdir(self.p_vectors_files_dir_path))
+		self.p_vectors_files_amount = len(os.listdir(self.p_vectors_files_dir_path)) - 1
 		self.episodes_numbers = [i for i in range(1, self.p_vectors_files_amount + 1)]
-		self.mean_z_values_per_episodes = []
-		self.max_z_per_episodes = []
+		self.success_hover_heights_amount_per_episodes = []
 		self.mean_reward_values_per_episodes = []
 		self.steps_per_episodes = []
 		self.Tsum_per_episodes = []
@@ -27,25 +27,21 @@ class Simulations_Logs_Analyzer:
 		self.T_hover = self.UAV_mass_in_kg * 9.8
 
 	def main(self):
-		self.define_mean_max_z_values_per_episodes()
+		self.define_success_hover_heights_per_episodes()
 		self.define_mean_reward_steps_Tsum_per_episodes()
 		
 		fig, ax = plt.subplots(4, 1)
-		self.plot_mean_max_z_per_episodes()
+		self.plot_success_hover_heights_z_per_episodes()
 		self.plot_mean_reward_per_episodes()
 		self.plot_steps_amount_per_episodes()
 		self.plot_Tsum_per_episodes()
 		plt.show()
 
-	def plot_mean_max_z_per_episodes(self):
+	def plot_success_hover_heights_z_per_episodes(self):
 		plt.subplot(4, 1, 1)
-		plt.plot(self.episodes_numbers, self.mean_z_values_per_episodes, marker = ".", label = "mean z(height)")
-		plt.plot(
-			self.episodes_numbers, self.max_z_per_episodes,
-			color = 'red', marker = ".", label = "max z(height)"
-		)
+		plt.plot(self.episodes_numbers, self.success_hover_heights_amount_per_episodes, label = "hover-z-amount")
 		plt.xlabel("episode")
-		plt.ylabel("z (height in m)")
+		plt.ylabel("success_hover_z_amount")
 		plt.legend()
 		plt.grid()
 
@@ -77,17 +73,6 @@ class Simulations_Logs_Analyzer:
 		plt.legend()
 		plt.grid()
 
-	def define_mean_max_z_values_per_episodes(self):
-		for i in self.episodes_numbers:
-			p_vector_file_path = f"{gv.P_VECTORS_IN_TIME_DIR_PATH}/{gv.P_VECTORS_FILENAME_PATTERN}{i}.jsonl"
-			episode_dataset = self.get_dataset_from_JSONL(p_vector_file_path)
-			episode_dataset_mean_z = self.get_mean_z_value_from_dataset(episode_dataset)
-			self.mean_z_values_per_episodes.append(
-				episode_dataset_mean_z
-			)
-			episode_dataset_max_z = self.get_max_z_value_from_dataset(episode_dataset)
-			self.max_z_per_episodes.append(episode_dataset_max_z)
-
 	def define_mean_reward_steps_Tsum_per_episodes(self):
 		for i in self.episodes_numbers:
 			buffer_file_path = f"{gv.REPLAY_BUFFERS_DIR_PATH}/{gv.REPLAY_BUFFERS_FILENAME_PATTERN}{i}.jsonl"
@@ -101,6 +86,10 @@ class Simulations_Logs_Analyzer:
 			self.Tsum_per_episodes.append(
 				self.get_mean_Tsum_from_dataset(episode_dataset)
 			)
+
+	def define_success_hover_heights_per_episodes(self):
+		dataset_success_hover_z = adf.get_dataset_from_JSONL(gv.SUCCESS_HOVER_HEIGHTS_DATASET_PATH)
+		self.success_hover_heights_amount_per_episodes = dataset_success_hover_z["success_hover_heights_amount"].values
 
 	def get_mean_z_value_from_dataset(self, p_vectors_dataset: pd.DataFrame):
 		return p_vectors_dataset["z"].mean()
