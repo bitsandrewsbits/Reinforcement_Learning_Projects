@@ -44,13 +44,22 @@ episodes: int):
 		self.total_simulations_time = 0
 		self.replay_buffer_filename_pattern = gv.REPLAY_BUFFERS_FILENAME_PATTERN
 
+		self.success_hover_heights_per_episode = {"success_hover_heights_amount": []}
+
 	def main(self):
 		start_time = time.time()
 		for i in range(1, self.episodes + 1):
 			self.current_episode_buffer = rb.ReplayBuffer(self.steps_in_episode, 32)
 			self.uav_model_env.reset_environment()
 			self.start_simulation(i)
-		adf.save_buffer_to_JSONL(self.train_replay_buffer.buffer, f"{gv.REPLAY_BUFFERS_DIR_PATH}/Train_Buffer.jsonl")
+			self.success_hover_heights_per_episode["success_hover_heights_amount"].append(
+				self.uav_model_env.hover_steps_amount
+			)
+		adf.save_dataset_to_JSONL(
+			pd.DataFrame(self.success_hover_heights_per_episode),
+			gv.SUCCESS_HOVER_HEIGHTS_DATASET_PATH
+		)
+		adf.save_dataset_to_JSONL(self.train_replay_buffer.buffer, f"{gv.REPLAY_BUFFERS_DIR_PATH}/Train_Buffer.jsonl")
 		end_time = time.time()
 		self.total_simulations_time = end_time - start_time
 		print(f"[INFO] Total simulations time in sec = {self.total_simulations_time}")
@@ -86,22 +95,28 @@ episodes: int):
 			action_t = self.actor.get_action(current_state)
 			# print("Action Tsum before scaling:", action_t["T_sum"])
 			action_t["T_sum"] = self.get_action_Tsum_in_hover_representation(action_t["T_sum"])
+			action_t["tau_x"], action_t["tau_y"], action_t["tau_z"] = self.get_scaled_moments_tau(action_t)
 			next_state, reward_t = self.uav_model_env.step(action_t)
 			transition_vector = self.train_replay_buffer.get_transition_vector(
 				current_state, action_t, reward_t, next_state
 			)
 			self.total_passed_steps += 1
-			self.actor.update_total_passed_steps(self.total_passed_steps)
 			self.train_replay_buffer.update_buffer_with_new_transition_vector(transition_vector, self.total_passed_steps)
 			self.current_episode_buffer.add_transition_vector_to_buffer(transition_vector, step_i)
 		current_episode_buffer_path = f"{gv.REPLAY_BUFFERS_DIR_PATH}/{self.replay_buffer_filename_pattern}{episode_number}.jsonl"
-		adf.save_buffer_to_JSONL(self.current_episode_buffer.buffer, current_episode_buffer_path)
+		adf.save_dataset_to_JSONL(self.current_episode_buffer.buffer, current_episode_buffer_path)
 		self.uav_model_env.save_episode_p_vectors_to_JSONL(episode_number)
 
 	def get_action_Tsum_in_hover_representation(self, action_Tsum):
-		updated_Tsum = self.uav_model_env.hover_action_components["T_sum"] * (1 + 0.4 * action_Tsum)
+		updated_Tsum = self.uav_model_env.hover_action_components["T_sum"] * (1 + 0.3 * action_Tsum)
 
 		return updated_Tsum
+
+	def get_scaled_moments_tau(self, action: dict):
+		scaled_tau_x = self.uav_model_env.max_tau_x * action["tau_x"]
+		scaled_tau_y = self.uav_model_env.max_tau_y * action["tau_y"]
+		scaled_tau_z = self.uav_model_env.max_tau_z * action["tau_z"]
+		return scaled_tau_x, scaled_tau_y, scaled_tau_z
 
 	def update_critic_Q1_Q2_trainable_weights(self, states_actions_batch, next_states_actions_batch, rewards_batch, log_actions_batch_probabilities):
 		with tf.GradientTape() as grad:
@@ -164,6 +179,6 @@ if __name__ == "__main__":
 	)
 	buffer_batch_size = 128
 	fpv_hover_simulation = FPV_Hover_Stabilization_Simulation(
-		UAV_model_environment, buffer_batch_size, episode_steps, 1000
+		UAV_model_environment, buffer_batch_size, episode_steps, 500
 	)
 	fpv_hover_simulation.main()
