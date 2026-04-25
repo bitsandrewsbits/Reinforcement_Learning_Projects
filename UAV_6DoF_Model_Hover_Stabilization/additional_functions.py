@@ -10,8 +10,11 @@ def get_values_as_array(target_dict: dict[np.array]) -> np.array:
 
 	return np.array(values)
 
-def save_buffer_to_JSONL(df: pd.DataFrame, file_path: str):
+def save_dataset_to_JSONL(df: pd.DataFrame, file_path: str):
 	df.to_json(file_path, orient = 'records', lines = True)
+
+def get_dataset_from_JSONL(file_path: str):
+	return pd.read_json(file_path, orient = 'records', lines = True)
 
 def create_dir_if_need(dir_path):
 	dir_path_elems = dir_path.split('/')
