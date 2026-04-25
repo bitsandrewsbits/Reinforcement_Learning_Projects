@@ -12,9 +12,9 @@ class UAV_6DoF_Model_Environment:
 		self.discount_gamma = discount_gamma
 		self.reward_coefs = reward_coefs
 		self.hover_extra_reward = 1
-		# self.survival_reward = 2
 		self.reward_crash_penalty = 20
 		self.epsilon = 0.1
+		self.hover_steps_amount = 0
 		self.delta_t_in_sec = 0.01
 		self.init_state_vector = init_state_vector
 		self.current_state_vector = init_state_vector
@@ -28,6 +28,9 @@ class UAV_6DoF_Model_Environment:
 		self.F_g = np.array([0, 0, -self.UAV_mass_in_kg * 9.8])
 		self.k_v = np.array([0.1, 0.1, 0.3])
 		self.inertia_moment_J = self.get_moment_inertia_J()
+		self.max_tau_x = self.Jx * 5
+		self.max_tau_y = self.Jy * 5
+		self.max_tau_z = self.Jz * 5
 		self.state_space_restrictions = state_space_restrictions
 
 		self.action_space_restrictions = {
@@ -93,6 +96,7 @@ class UAV_6DoF_Model_Environment:
 		self.current_state_vector_reward = 0
 		self.early_episode_termination = False
 		self.current_step = 0
+		self.hover_steps_amount = 0
 		self.p_vector_component_episode_logs = {"time_in_sec": [], "x": [], "y": [], "z": []}
 
 	def get_next_state_vector(self, action_t: dict):
@@ -225,11 +229,11 @@ class UAV_6DoF_Model_Environment:
 		) * self.delta_t_in_sec
 
 	def get_moment_inertia_J(self):
-		Jx = 2 * self.UAV_motor_mass_in_kg * self.UAV_wing_shoulder_in_m ** 2
-		Jy = 2 * self.UAV_motor_mass_in_kg * self.UAV_wing_shoulder_in_m ** 2
-		Jz = 4 * self.UAV_motor_mass_in_kg * self.UAV_wing_shoulder_in_m ** 2
+		self.Jx = 2 * self.UAV_motor_mass_in_kg * self.UAV_wing_shoulder_in_m ** 2
+		self.Jy = 2 * self.UAV_motor_mass_in_kg * self.UAV_wing_shoulder_in_m ** 2
+		self.Jz = 4 * self.UAV_motor_mass_in_kg * self.UAV_wing_shoulder_in_m ** 2
 		inertia_moment_J = np.array([
-			[Jx, 0, 0], [0, Jy, 0], [0, 0, Jz]
+			[self.Jx, 0, 0], [0, self.Jy, 0], [0, 0, self.Jz]
 		])
 		return inertia_moment_J
 
@@ -248,8 +252,9 @@ class UAV_6DoF_Model_Environment:
 		if self.current_state_vector["p"][2] <= 0:
 			current_state_vector_reward -= self.reward_crash_penalty
 		elif z_deviation_from_target <= self.epsilon:
-			current_state_vector_reward += 5
-		current_state_vector_reward += 5 * (next_z_deviation_from_target - z_deviation_from_target)
+			self.hover_steps_amount += 1
+			current_state_vector_reward += 5 + 2 * self.hover_steps_amount
+		current_state_vector_reward += 10 * (next_z_deviation_from_target - z_deviation_from_target)
 		current_state_vector_reward -= 0.5 * self.current_state_vector["v"][2] ** 2
 		current_state_vector_reward -= 2 * (self.action_space_values["T_sum"] - self.hover_action_components["T_sum"]) ** 2
 
