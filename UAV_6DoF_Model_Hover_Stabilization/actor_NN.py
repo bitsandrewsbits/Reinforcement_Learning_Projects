@@ -61,6 +61,7 @@ class Actor(tf.keras.Model):
 		normal_noise = tf.random.normal(self.means_tensor.shape)
 		self.mean_std_noise_batch = self.means_tensor + self.stds_tensor * normal_noise
 		actions_n_batch = tf.tanh(self.mean_std_noise_batch)
+		# actions_n_batch = tf.tanh(self.means_tensor)
 		
 		return actions_n_batch
 		
@@ -68,8 +69,8 @@ class Actor(tf.keras.Model):
 		return mean_log_std_batches[0]
 
 	def get_std_batch(self, log_stds_tensor):
-		max_std = 0.3
-		std_batch = tf.clip_by_value(tf.exp(log_stds_tensor), 0.05, max_std)
+		log_stds_tensor = tf.clip_by_value(log_stds_tensor, -5, 0)
+		std_batch = tf.exp(log_stds_tensor)
 		return std_batch
 
 	def get_log_probabilities(self):
