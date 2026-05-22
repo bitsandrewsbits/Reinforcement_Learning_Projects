@@ -17,12 +17,13 @@ class ReplayBuffer:
 		self.batch_size = batch_size
 
 	def test_buffer_on_random_vectors(self):
-		for _ in range(self.buffer_max_transition_vectors):
+		for i in range(self.buffer_max_transition_vectors):
 			transition_vector = self.get_transition_vector(
 				self.generate_state_t(), self.generate_action_t(),
-				self.generate_reward_t(), self.generate_state_tp1()
+				self.generate_reward_t(), self.generate_done(),
+				self.generate_state_tp1()
 			)
-			self.add_transition_vector_to_buffer(transition_vector)
+			self.add_transition_vector_to_buffer(transition_vector, i)
 
 	def test_buffer_batch_getting(self):
 		for _ in range(1):
@@ -30,7 +31,12 @@ class ReplayBuffer:
 			print("Current batch:")
 			print(batch)
 			print("Separated vectors:")
-			states, actions, rewards, next_states = self.get_states_actions_rewards_next_states(batch)
+			states, actions, rewards, dones, next_states = self.get_states_actions_rewards_dones_next_states(batch)
+			print("states:", states)
+			print("actions:", actions)
+			print("rewards:", rewards)
+			print("dones:", dones)
+			print("next_states:", next_states)
 
 	def add_transition_vector_to_buffer(self, transition_vector: pd.DataFrame, episode_step: int):
 		if episode_step < self.buffer_max_transition_vectors:
@@ -45,11 +51,12 @@ class ReplayBuffer:
 			updated_index = passed_steps % self.buffer_max_transition_vectors
 			self.buffer.loc[updated_index] = transition_vector.loc[0]
 
-	def get_transition_vector(self, state_t: dict, action_t: dict, reward_t: float, state_tp1: dict):
-		transition_vector = {"state_t": [], "action_t": [], "reward_t": [], "state_tp1": []}
+	def get_transition_vector(self, state_t: dict, action_t: dict, reward_t: float, done: int, state_tp1: dict):
+		transition_vector = {"state_t": [], "action_t": [], "reward_t": [], "target_done": [], "state_tp1": []}
 		transition_vector["state_t"].append(adf.get_values_as_array(state_t))
 		transition_vector["action_t"].append(list(action_t.values()))
 		transition_vector["reward_t"].append(reward_t)
+		transition_vector["target_done"].append(done)
 		transition_vector["state_tp1"].append(adf.get_values_as_array(state_tp1))
 
 		return pd.DataFrame(transition_vector)
@@ -57,12 +64,13 @@ class ReplayBuffer:
 	def get_batch(self) -> pd.DataFrame:
 		return self.buffer.sample(self.batch_size, axis = 0)
 
-	def get_states_actions_rewards_next_states(self, batch: pd.DataFrame):
+	def get_states_actions_rewards_dones_next_states(self, batch: pd.DataFrame):
 		states = tf.convert_to_tensor([state for state in batch["state_t"].values])
 		actions = [action for action in batch["action_t"].values]
 		rewards = batch["reward_t"].values
+		dones = batch["target_done"].values
 		next_states = tf.convert_to_tensor([next_state for next_state in batch["state_tp1"].values])
-		return states, actions, rewards, next_states
+		return states, actions, rewards, dones, next_states
 
 	def generate_state_t(self):
 		state_t = {
@@ -81,6 +89,9 @@ class ReplayBuffer:
 
 	def generate_reward_t(self):
 		return randint(-80, 80)
+
+	def generate_done(self):
+		return randint(0, 1)
 
 	def generate_state_tp1(self):
 		state_tp1 = {
