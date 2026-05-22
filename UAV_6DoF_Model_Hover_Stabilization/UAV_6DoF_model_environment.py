@@ -8,12 +8,13 @@ class UAV_6DoF_Model_Environment:
 	def __init__(self, discount_gamma, reward_coefs: dict, 
 	init_state_vector: dict, state_space_restrictions: dict, 
 	hover_stabilization_height_in_m, hover_time_in_sec: int,
+	max_diviation_from_hover_height,
 	simulation_steps: int):
 		self.discount_gamma = discount_gamma
 		self.reward_coefs = reward_coefs
-		self.hover_extra_reward = 1
+		self.hover_extra_reward = 7
 		self.reward_crash_penalty = 20
-		self.epsilon = 0.1
+		self.epsilon = max_diviation_from_hover_height
 		self.hover_steps_amount = 0
 		self.delta_t_in_sec = 0.01
 		self.init_state_vector = init_state_vector
@@ -26,7 +27,7 @@ class UAV_6DoF_Model_Environment:
 		self.UAV_mass_in_kg = self.battery_mass_in_kg + 4 * self.UAV_motor_mass_in_kg
 		self.UAV_wing_shoulder_in_m = 0.2
 		self.F_g = np.array([0, 0, -self.UAV_mass_in_kg * 9.8])
-		self.k_v = np.array([0.1, 0.1, 0.3])
+		self.k_v = np.array([0.1, 0.1, 0.2])
 		self.inertia_moment_J = self.get_moment_inertia_J()
 		self.max_tau_x = self.Jx * 5
 		self.max_tau_y = self.Jy * 5
@@ -37,8 +38,8 @@ class UAV_6DoF_Model_Environment:
 			"T_sum": [0, 4 * self.UAV_mass_in_kg * 9.8],
 			"tau_x": [-1, 1], "tau_y": [-1, 1], "tau_z": [-1, 1]
 		}
-		self.x_y_coeffs_for_min_max = {"x": 1.2, "y": 1.2}
-		self.z_coeff_for_max_height = 1.25
+		self.x_y_coeffs_for_min_max = {"x": 2, "y": 2}
+		self.z_coeff_for_max_height = 1.5
 		self.hover_stabilization_height_in_m = hover_stabilization_height_in_m
 		self.target_p_components_for_hover_stabilization_in_m = [
 			self.init_state_vector["p"][0],
@@ -46,13 +47,15 @@ class UAV_6DoF_Model_Environment:
 			self.hover_stabilization_height_in_m
 		]
 		self.hover_action_components = {
-			"T_sum": self.UAV_mass_in_kg * 9.8,
+			"T_sum": 1.28 * self.UAV_mass_in_kg * 9.8,
 			"tau_x": 0.0, "tau_y": 0.0, "tau_z": 0.0
 		}
 		self.update_state_space_restrictions()
 		self.current_state_vector_reward = 0
 		self.hover_time_in_sec = hover_time_in_sec
+		self.target_hover_steps_amount = int(self.hover_time_in_sec / self.delta_t_in_sec)
 
+		self.target_done = 0
 		self.early_episode_termination = False
 		self.current_step = 0
 		self.simulation_steps = simulation_steps
@@ -86,7 +89,7 @@ class UAV_6DoF_Model_Environment:
 		self.reset_next_state_vector()
 		self.current_step += 1
 
-		return next_state_vector, current_state_vector_reward
+		return next_state_vector, current_state_vector_reward, self.target_done
 
 	def reset_environment(self):
 		self.current_state_vector = self.init_state_vector
@@ -97,6 +100,7 @@ class UAV_6DoF_Model_Environment:
 		self.early_episode_termination = False
 		self.current_step = 0
 		self.hover_steps_amount = 0
+		self.target_done = 0
 		self.p_vector_component_episode_logs = {"time_in_sec": [], "x": [], "y": [], "z": []}
 
 	def get_next_state_vector(self, action_t: dict):
@@ -137,6 +141,8 @@ class UAV_6DoF_Model_Environment:
 		if self.is_early_episode_termination_by_p_vector_component():
 			self.early_episode_termination = True
 		if self.is_early_episode_termination_by_q_vector_component():
+			self.early_episode_termination = True
+		if self.target_done == 1:
 			self.early_episode_termination = True
 		return 0
 
@@ -236,27 +242,29 @@ class UAV_6DoF_Model_Environment:
 			[self.Jx, 0, 0], [0, self.Jy, 0], [0, 0, self.Jz]
 		])
 		return inertia_moment_J
-
+	
 	def get_reward_for_current_state_vector(self):
-		xy_deviation_from_target = self.get_vector_deviation_by_module("p", [0, 1])
-		z_deviation_from_target = abs(self.current_state_vector["p"][2] - self.target_p_components_for_hover_stabilization_in_m[2])
-		next_z_deviation_from_target = abs(self.next_state_vector["p"][2] - self.target_p_components_for_hover_stabilization_in_m[2])
-		v_vector_by_module = self.get_vector_by_module("v")
-		omega_vector_by_module = self.get_vector_by_module("omega")
-		action_deviation_by_module = self.get_action_deviation_by_module()
-		
-		current_state_vector_reward = -self.reward_coefs["alpha_xy"] * xy_deviation_from_target ** 2 -\
-		self.reward_coefs["alpha_z"] * z_deviation_from_target ** 2 - self.reward_coefs["beta"] * v_vector_by_module ** 2 -\
-		self.reward_coefs["gamma"] * omega_vector_by_module ** 2 -\
-		self.reward_coefs["delta"] * action_deviation_by_module ** 2
-		if self.current_state_vector["p"][2] <= 0:
-			current_state_vector_reward -= self.reward_crash_penalty
-		elif z_deviation_from_target <= self.epsilon:
+		thrust_hover_deviation = self.action_space_values["T_sum"] - self.hover_action_components["T_sum"]
+		z_deviation_from_target = self.current_state_vector["p"][2] - self.hover_stabilization_height_in_m
+
+		current_state_vector_reward = 0
+		if abs(z_deviation_from_target) <= self.epsilon:
 			self.hover_steps_amount += 1
-			current_state_vector_reward += 5 + 2 * self.hover_steps_amount
-		current_state_vector_reward += 10 * (next_z_deviation_from_target - z_deviation_from_target)
-		current_state_vector_reward -= 0.5 * self.current_state_vector["v"][2] ** 2
-		current_state_vector_reward -= 2 * (self.action_space_values["T_sum"] - self.hover_action_components["T_sum"]) ** 2
+			current_state_vector_reward += self.hover_extra_reward
+		else:
+			self.hover_steps_amount = 0
+
+		current_state_vector_reward -= 20 * abs(self.current_state_vector["v"][2]) ** 2
+		current_state_vector_reward -= 7 * abs(z_deviation_from_target) ** 2
+		current_state_vector_reward -= 1.5 * thrust_hover_deviation ** 2
+		current_state_vector_reward += 70 * (self.hover_steps_amount / self.target_hover_steps_amount)
+
+		if self.current_state_vector["p"][2] <= 0:
+		    current_state_vector_reward -= self.reward_crash_penalty
+
+		if self.hover_steps_amount == self.target_hover_steps_amount:
+			current_state_vector_reward += 500
+			self.target_done = 1
 
 		return current_state_vector_reward
 
