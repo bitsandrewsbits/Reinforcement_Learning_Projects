@@ -24,7 +24,7 @@ class Simulations_Logs_Analyzer:
 		self.battery_mass_in_kg = 0.9
 		self.UAV_motor_mass_in_kg = 0.06
 		self.UAV_mass_in_kg = self.battery_mass_in_kg + 4 * self.UAV_motor_mass_in_kg
-		self.T_hover = self.UAV_mass_in_kg * 9.8
+		self.T_hover = 1.28 * self.UAV_mass_in_kg * 9.8
 
 	def main(self):
 		self.define_success_hover_heights_per_episodes()
@@ -39,7 +39,10 @@ class Simulations_Logs_Analyzer:
 
 	def plot_success_hover_heights_z_per_episodes(self):
 		plt.subplot(4, 1, 1)
-		plt.plot(self.episodes_numbers, self.success_hover_heights_amount_per_episodes, label = "hover-z-amount")
+		plt.scatter(
+			self.episodes_numbers, self.success_hover_heights_amount_per_episodes,
+			marker = '.', label = "hover-z-amount"
+		)
 		plt.xlabel("episode")
 		plt.ylabel("success_hover_z_amount")
 		plt.legend()
@@ -47,7 +50,10 @@ class Simulations_Logs_Analyzer:
 
 	def plot_Tsum_per_episodes(self):
 		plt.subplot(4, 1, 2)
-		plt.plot(self.episodes_numbers, self.Tsum_per_episodes, marker = ".", label = "mean Tsum")
+		plt.scatter(
+			self.episodes_numbers, self.Tsum_per_episodes,
+			marker = '.', label = "mean Tsum"
+		)
 		plt.plot(
 			self.episodes_numbers, [self.T_hover for _ in self.Tsum_per_episodes],
 			color = 'red', label = "T-hover"
@@ -59,7 +65,10 @@ class Simulations_Logs_Analyzer:
 
 	def plot_mean_reward_per_episodes(self):
 		plt.subplot(4, 1, 3)
-		plt.plot(self.episodes_numbers, self.mean_reward_values_per_episodes, marker = ".", label = "reward")
+		plt.scatter(
+			self.episodes_numbers, self.mean_reward_values_per_episodes,
+			marker = '.', label = "reward"
+		)
 		plt.xlabel("episode")
 		plt.ylabel("reward")
 		plt.legend()
@@ -67,7 +76,10 @@ class Simulations_Logs_Analyzer:
 
 	def plot_steps_amount_per_episodes(self):
 		plt.subplot(4, 1, 4)
-		plt.plot(self.episodes_numbers, self.steps_per_episodes, marker = ".", label = "steps amount")
+		plt.scatter(
+			self.episodes_numbers, self.steps_per_episodes,
+			marker = '.', label = "steps amount"
+		)
 		plt.xlabel("episode")
 		plt.ylabel("steps amount")
 		plt.legend()
