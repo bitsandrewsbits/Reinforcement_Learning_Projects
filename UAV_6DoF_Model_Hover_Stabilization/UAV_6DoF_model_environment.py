@@ -5,14 +5,15 @@ import random
 import global_vars as gv
 
 class UAV_6DoF_Model_Environment:
-	def __init__(self, discount_gamma, reward_coefs: dict, 
+	def __init__(self, uav_action_name: str, discount_gamma, reward_coefs: dict, 
 	init_state_vector: dict, state_space_restrictions: dict, 
 	hover_stabilization_height_in_m, hover_time_in_sec: int,
 	max_diviation_from_hover_height,
 	simulation_steps: int):
+		self.uav_action_name = uav_action_name
 		self.discount_gamma = discount_gamma
 		self.reward_coefs = reward_coefs
-		self.hover_extra_reward = 7
+		self.hover_extra_reward = 6
 		self.reward_crash_penalty = 20
 		self.epsilon = max_diviation_from_hover_height
 		self.hover_steps_amount = 0
@@ -20,8 +21,6 @@ class UAV_6DoF_Model_Environment:
 		self.init_state_vector = init_state_vector
 		self.current_state_vector = init_state_vector
 		self.next_state_vector = {"p": [], "v": [], "q": [], "omega": []}
-		self.action_space_values = {"T_sum": 0.0, "tau_x": 0.0, "tau_y": 0.0, "tau_z": 0.0}
-		self.thrust_force_F_b_t = np.array([0, 0, self.action_space_values["T_sum"]])
 		self.battery_mass_in_kg = 0.9
 		self.UAV_motor_mass_in_kg = 0.06
 		self.UAV_mass_in_kg = self.battery_mass_in_kg + 4 * self.UAV_motor_mass_in_kg
@@ -50,6 +49,14 @@ class UAV_6DoF_Model_Environment:
 			"T_sum": 1.28 * self.UAV_mass_in_kg * 9.8,
 			"tau_x": 0.0, "tau_y": 0.0, "tau_z": 0.0
 		}
+		if self.uav_action_name == "ascent":
+			self.action_space_values = {"T_sum": 0.0, "tau_x": 0.0, "tau_y": 0.0, "tau_z": 0.0}
+		elif self.uav_action_name == "hover_stabilization":
+			self.action_space_values = {
+				"T_sum": self.hover_action_components["T_sum"] + random.randint(-2, 0),
+				"tau_x": 0.0, "tau_y": 0.0, "tau_z": 0.0
+			}
+		self.thrust_force_F_b_t = np.array([0, 0, self.action_space_values["T_sum"]])
 		self.update_state_space_restrictions()
 		self.current_state_vector_reward = 0
 		self.hover_time_in_sec = hover_time_in_sec
@@ -57,6 +64,7 @@ class UAV_6DoF_Model_Environment:
 
 		self.target_done = 0
 		self.early_episode_termination = False
+		self.success_stage_trajectory = False
 		self.current_step = 0
 		self.simulation_steps = simulation_steps
 		self.p_vector_component_episode_logs = {"time_in_sec": [], "x": [], "y": [], "z": []}
@@ -80,7 +88,10 @@ class UAV_6DoF_Model_Environment:
 
 	def step(self, action_t: dict):
 		next_state_vector = self.get_next_state_vector(action_t)
-		current_state_vector_reward = self.get_reward_for_current_state_vector()
+		if self.uav_action_name == "ascent":
+			current_state_vector_reward = self.get_reward_for_current_state_vector_ascent_stage()
+		elif self.uav_action_name == "hover_stabilization":
+			current_state_vector_reward = self.get_reward_for_current_state_vector_hover_stabilization_stage()
 
 		self.log_p_vector_components_at_current_step()
 		self.check_current_state_vector_components_to_early_episode_termination()
@@ -98,6 +109,7 @@ class UAV_6DoF_Model_Environment:
 		self.thrust_force_F_b_t = np.array([0, 0, self.action_space_values["T_sum"]])
 		self.current_state_vector_reward = 0
 		self.early_episode_termination = False
+		self.success_stage_trajectory = False
 		self.current_step = 0
 		self.hover_steps_amount = 0
 		self.target_done = 0
@@ -242,8 +254,27 @@ class UAV_6DoF_Model_Environment:
 			[self.Jx, 0, 0], [0, self.Jy, 0], [0, 0, self.Jz]
 		])
 		return inertia_moment_J
+
+	def get_reward_for_current_state_vector_ascent_stage(self):
+		z_deviation_from_target = self.current_state_vector["p"][2] - self.hover_stabilization_height_in_m
+
+		current_state_vector_reward = 0
+		current_state_vector_reward -= 20 * abs(self.current_state_vector["v"][2]) ** 2
+		current_state_vector_reward -= 10 * abs(z_deviation_from_target) ** 2
+
+		if self.current_state_vector["p"][2] <= 0:
+		    current_state_vector_reward -= self.reward_crash_penalty
+
+		if abs(z_deviation_from_target) <= self.epsilon:
+			current_state_vector_reward += 500
+			self.target_done = 1
+			self.success_stage_trajectory = True
+		else:
+			self.success_stage_trajectory = False
+
+		return current_state_vector_reward
 	
-	def get_reward_for_current_state_vector(self):
+	def get_reward_for_current_state_vector_hover_stabilization_stage(self):
 		thrust_hover_deviation = self.action_space_values["T_sum"] - self.hover_action_components["T_sum"]
 		z_deviation_from_target = self.current_state_vector["p"][2] - self.hover_stabilization_height_in_m
 
@@ -255,16 +286,16 @@ class UAV_6DoF_Model_Environment:
 			self.hover_steps_amount = 0
 
 		current_state_vector_reward -= 20 * abs(self.current_state_vector["v"][2]) ** 2
-		current_state_vector_reward -= 7 * abs(z_deviation_from_target) ** 2
-		current_state_vector_reward -= 1.5 * thrust_hover_deviation ** 2
-		current_state_vector_reward += 70 * (self.hover_steps_amount / self.target_hover_steps_amount)
-
-		if self.current_state_vector["p"][2] <= 0:
-		    current_state_vector_reward -= self.reward_crash_penalty
+		current_state_vector_reward -= 30 * abs(z_deviation_from_target) ** 2
+		current_state_vector_reward -= 40 * thrust_hover_deviation ** 2
+		current_state_vector_reward += 100 * (self.hover_steps_amount / self.target_hover_steps_amount)
 
 		if self.hover_steps_amount == self.target_hover_steps_amount:
 			current_state_vector_reward += 500
 			self.target_done = 1
+			self.success_stage_trajectory = True
+		else:
+			self.success_stage_trajectory = False
 
 		return current_state_vector_reward
 
@@ -299,7 +330,7 @@ class UAV_6DoF_Model_Environment:
 	def save_episode_p_vectors_to_JSONL(self, episode_number: int):
 		logs_dataset = pd.DataFrame(self.p_vector_component_episode_logs)
 		logs_dataset.to_json(
-			f"{gv.P_VECTORS_IN_TIME_DIR_PATH}/{self.p_vectors_filename_pattern}{episode_number}.jsonl",
+			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][1]}/{self.p_vectors_filename_pattern}{episode_number}.jsonl",
 			orient = 'records', lines = True
 		)
 
