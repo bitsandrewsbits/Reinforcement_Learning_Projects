@@ -14,16 +14,28 @@ import critic_NNs as crit
 import additional_functions as adf
 import global_vars as gv
 
-class FPV_Hover_Stabilization_Simulation:
-	def __init__(self, uav_model_env, buffer_batch_size: int, steps_in_episode: int, 
+class UAV_6DoF_Action_Simulation:
+	def __init__(self, uav_action_name: str, uav_model_env, buffer_batch_size: int, steps_in_episode: int, 
 episodes: int):
-		self.create_dirs_for_simulations()
+		self.uav_action_name = uav_action_name
+		self.create_dirs_for_simulations(self.uav_action_name)
 		self.steps_in_episode = steps_in_episode
 		self.episodes = episodes
 		self.buffer_batch_size = buffer_batch_size
+		# self.success_transitions_batch_size_percents = 0.35
+		# self.success_transitions_batch_size = int(
+		# 	self.success_transitions_batch_size_percents * self.buffer_batch_size
+		# )
+		# self.train_batch_size = self.buffer_batch_size - self.success_transitions_batch_size
 		self.passed_steps_amount_before_learning = gv.PASSED_STEPS_BEFORE_LEARNING
 		self.train_buffer_size = 10 ** 5
-		self.train_replay_buffer = rb.ReplayBuffer(self.train_buffer_size, self.buffer_batch_size)
+		self.success_buffer_size = 10 ** 4
+		self.train_replay_buffer = rb.ReplayBuffer(
+			self.train_buffer_size, self.buffer_batch_size
+		)
+		# self.success_replay_buffer = rb.ReplayBuffer(
+		# 	self.success_buffer_size, self.success_transitions_batch_size
+		# )
 		self.current_episode_buffer = object
 		self.total_passed_steps = 0
 		self.uav_model_env = uav_model_env
@@ -56,11 +68,17 @@ episodes: int):
 			self.success_hover_heights_per_episode["success_hover_heights_amount"].append(
 				self.uav_model_env.hover_steps_amount
 			)
+		if self.uav_action_name == "hover_stabilization":
+			adf.save_dataset_to_JSONL(
+				pd.DataFrame(self.success_hover_heights_per_episode),
+				gv.SUCCESS_HOVER_HEIGHTS_DATASET_PATH
+			)
 		adf.save_dataset_to_JSONL(
-			pd.DataFrame(self.success_hover_heights_per_episode),
-			gv.SUCCESS_HOVER_HEIGHTS_DATASET_PATH
+			self.train_replay_buffer.buffer, f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][2]}/Train_Buffer.jsonl"
 		)
-		adf.save_dataset_to_JSONL(self.train_replay_buffer.buffer, f"{gv.REPLAY_BUFFERS_DIR_PATH}/Train_Buffer.jsonl")
+		# adf.save_dataset_to_JSONL(
+		# 	self.success_replay_buffer.buffer, f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][2]}/Success_Buffer.jsonl"
+		# )
 		end_time = time.time()
 		self.total_simulations_time = end_time - start_time
 		print(f"[INFO] Total simulations time in sec = {self.total_simulations_time}")
@@ -103,9 +121,14 @@ episodes: int):
 				current_state, action_t, reward_t, done, next_state
 			)
 			self.total_passed_steps += 1
+			
 			self.train_replay_buffer.update_buffer_with_new_transition_vector(transition_vector, self.total_passed_steps)
 			self.current_episode_buffer.add_transition_vector_to_buffer(transition_vector, step_i)
-		current_episode_buffer_path = f"{gv.REPLAY_BUFFERS_DIR_PATH}/{self.replay_buffer_filename_pattern}{episode_number}.jsonl"
+		
+		# if self.uav_model_env.success_hover_trajectory:
+		# 	self.success_replay_buffer.update_success_buffer_with_new_trajectory(self.current_episode_buffer.buffer)
+		
+		current_episode_buffer_path = f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][2]}/{self.replay_buffer_filename_pattern}{episode_number}.jsonl"
 		adf.save_dataset_to_JSONL(self.current_episode_buffer.buffer, current_episode_buffer_path)
 		self.uav_model_env.save_episode_p_vectors_to_JSONL(episode_number)
 
@@ -164,8 +187,8 @@ episodes: int):
 				self.tau * critic_var + (1 - self.tau) * target_critic_var
 			)
 
-	def create_dirs_for_simulations(self):
-		simulations_data_dirs = [gv.SIMULATION_DIR, gv.P_VECTORS_IN_TIME_DIR_PATH, gv.REPLAY_BUFFERS_DIR_PATH]
+	def create_dirs_for_simulations(self, action_name: str):
+		simulations_data_dirs = gv.UAV_ACTIONS_SIMULATIONS_DIRS[action_name]
 		for sim_dir in simulations_data_dirs:
 			adf.create_dir_if_need(sim_dir)
 
@@ -181,10 +204,10 @@ if __name__ == "__main__":
 			"p": {"x": ["min_x", "max_x"], "y": ["min_y", "max_y"], "z": [0, "max_height"]},
 			"q": {"q1": [-0.7, 0.7], "q2": [-0.7, 0.7]}, "T_sum": [0, "max_T_sum"]
 		},
-		0.5, 0.3, 0.08, episode_steps
+		0.5, 0.1, 0.05, episode_steps
 	)
-	buffer_batch_size = 128
-	fpv_hover_simulation = FPV_Hover_Stabilization_Simulation(
+	buffer_batch_size = 64
+	fpv_hover_simulation = UAV_6DoF_Action_Simulation(
 		UAV_model_environment, buffer_batch_size, episode_steps, 400
 	)
 	fpv_hover_simulation.main()
