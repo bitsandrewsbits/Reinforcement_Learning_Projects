@@ -1,7 +1,4 @@
 # Simulations logs analyzer: 
-#	max-z(height in m) per episode,
-#	mean reward per episode,
-#	steps amount per episode
 import os
 import pandas as pd
 import matplotlib
@@ -12,13 +9,15 @@ import global_vars as gv
 import additional_functions as adf
 
 class Simulations_Logs_Analyzer:
-	def __init__(self, replay_buffers_dir_path: str, p_vectors_dir_path: str):
+	def __init__(self, uav_action_name: str, replay_buffers_dir_path: str, p_vectors_dir_path: str):
+		self.uav_action_name = uav_action_name
 		self.replay_buffers_dir_path = replay_buffers_dir_path
 		self.p_vectors_files_dir_path = p_vectors_dir_path
 		self.p_vectors_files_amount = len(os.listdir(self.p_vectors_files_dir_path)) - 1
 		self.episodes_numbers = [i for i in range(1, self.p_vectors_files_amount + 1)]
 		self.success_hover_heights_amount_per_episodes = []
 		self.mean_reward_values_per_episodes = []
+		self.max_height_z_per_episodes = []
 		self.steps_per_episodes = []
 		self.Tsum_per_episodes = []
 		self.battery_mass_in_kg = 0.9
@@ -27,15 +26,31 @@ class Simulations_Logs_Analyzer:
 		self.T_hover = 1.28 * self.UAV_mass_in_kg * 9.8
 
 	def main(self):
-		self.define_success_hover_heights_per_episodes()
 		self.define_mean_reward_steps_Tsum_per_episodes()
 		
 		fig, ax = plt.subplots(4, 1)
-		self.plot_success_hover_heights_z_per_episodes()
+		if self.uav_action_name == "ascent":
+			self.define_max_height_z_per_episodes()
+			self.plot_max_height_z_per_episodes()
+		elif self.uav_action_name == "hover_stabilization":
+			self.define_success_hover_heights_per_episodes()
+			self.plot_success_hover_heights_z_per_episodes()
+		
 		self.plot_mean_reward_per_episodes()
 		self.plot_steps_amount_per_episodes()
 		self.plot_Tsum_per_episodes()
 		plt.show()
+
+	def plot_max_height_z_per_episodes(self):
+		plt.subplot(4, 1, 1)
+		plt.scatter(
+			self.episodes_numbers, self.max_height_z_per_episodes,
+			marker = '.', label = "max-height-z"
+		)
+		plt.xlabel("episode")
+		plt.ylabel("max_height_z")
+		plt.legend()
+		plt.grid()
 
 	def plot_success_hover_heights_z_per_episodes(self):
 		plt.subplot(4, 1, 1)
@@ -87,7 +102,7 @@ class Simulations_Logs_Analyzer:
 
 	def define_mean_reward_steps_Tsum_per_episodes(self):
 		for i in self.episodes_numbers:
-			buffer_file_path = f"{gv.REPLAY_BUFFERS_DIR_PATH}/{gv.REPLAY_BUFFERS_FILENAME_PATTERN}{i}.jsonl"
+			buffer_file_path = f"{self.replay_buffers_dir_path}/{gv.REPLAY_BUFFERS_FILENAME_PATTERN}{i}.jsonl"
 			episode_dataset = self.get_dataset_from_JSONL(buffer_file_path)
 			episode_dataset_mean_reward = self.get_mean_reward_value_from_dataset(episode_dataset)
 			self.mean_reward_values_per_episodes.append(
@@ -97,6 +112,15 @@ class Simulations_Logs_Analyzer:
 			self.steps_per_episodes.append(episode_steps)
 			self.Tsum_per_episodes.append(
 				self.get_mean_Tsum_from_dataset(episode_dataset)
+			)
+
+	def define_max_height_z_per_episodes(self):
+		for i in self.episodes_numbers:
+			buffer_file_path = f"{self.p_vectors_files_dir_path}/{gv.P_VECTORS_FILENAME_PATTERN}{i}.jsonl"
+			episode_dataset = self.get_dataset_from_JSONL(buffer_file_path)
+			episode_dataset_max_z = self.get_max_z_value_from_dataset(episode_dataset)
+			self.max_height_z_per_episodes.append(
+				episode_dataset_max_z
 			)
 
 	def define_success_hover_heights_per_episodes(self):
@@ -126,8 +150,11 @@ class Simulations_Logs_Analyzer:
 		)
 
 if __name__ == "__main__":
-	p_vectors_analyzer = Simulations_Logs_Analyzer(
-		gv.REPLAY_BUFFERS_DIR_PATH,
-		gv.P_VECTORS_IN_TIME_DIR_PATH
-	)
-	p_vectors_analyzer.main()
+	uav_actions = ["ascent", "hover_stabilization"]
+	for uav_action in uav_actions:
+		p_vectors_analyzer_uav_action = Simulations_Logs_Analyzer(
+			uav_action,
+			gv.UAV_ACTIONS_SIMULATIONS_DIRS[uav_action][2],
+			gv.UAV_ACTIONS_SIMULATIONS_DIRS[uav_action][1]
+		)
+		p_vectors_analyzer_uav_action.main()
