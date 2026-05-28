@@ -38,6 +38,7 @@ episodes: int):
 		# )
 		self.current_episode_buffer = object
 		self.total_passed_steps = 0
+		self.actor_training_started = False
 		self.uav_model_env = uav_model_env
 		self.actor = act.Actor(self.train_replay_buffer)
 		self.critic = crit.Critic()
@@ -57,17 +58,32 @@ episodes: int):
 		self.replay_buffer_filename_pattern = gv.REPLAY_BUFFERS_FILENAME_PATTERN
 
 		self.success_hover_heights_per_episode = {"success_hover_heights_amount": []}
+		self.uav_action_success_trajectories_sequence_amount = 0
+		self.agent_learned_uav_action = False
 
 	def main(self):
 		start_time = time.time()
 		for i in range(1, self.episodes + 1):
-			self.alpha = max(0.001, self.alpha * (0.997 ** i))
+			if self.agent_learned_uav_action:
+				print(f"[SUCCESS] Agent successfully learned action - {self.uav_action_name} !")
+				break
+			self.alpha = max(0.001, self.alpha * (0.995 ** i))
 			self.current_episode_buffer = rb.ReplayBuffer(self.steps_in_episode, 32)
 			self.uav_model_env.reset_environment()
 			self.start_simulation(i)
 			self.success_hover_heights_per_episode["success_hover_heights_amount"].append(
 				self.uav_model_env.hover_steps_amount
 			)
+			if self.uav_model_env.success_stage_trajectory and self.actor_training_started:
+				self.uav_action_success_trajectories_sequence_amount += 1
+			else:
+				self.uav_action_success_trajectories_sequence_amount = 0
+
+			if self.uav_action_success_trajectories_sequence_amount > 20:
+				self.agent_learned_uav_action = True
+			else:
+				self.agent_learned_uav_action = False
+
 		if self.uav_action_name == "hover_stabilization":
 			adf.save_dataset_to_JSONL(
 				pd.DataFrame(self.success_hover_heights_per_episode),
@@ -90,6 +106,7 @@ episodes: int):
 				break
 			train_buffer_size = self.train_replay_buffer.buffer.shape[0]
 			if self.total_passed_steps > self.passed_steps_amount_before_learning:
+				self.actor_training_started = True
 				buffer_batch = self.train_replay_buffer.get_batch()
 				states, actions, rewards, dones, next_states = self.train_replay_buffer.get_states_actions_rewards_dones_next_states(buffer_batch)
 				
@@ -124,7 +141,7 @@ episodes: int):
 			
 			self.train_replay_buffer.update_buffer_with_new_transition_vector(transition_vector, self.total_passed_steps)
 			self.current_episode_buffer.add_transition_vector_to_buffer(transition_vector, step_i)
-		
+
 		# if self.uav_model_env.success_hover_trajectory:
 		# 	self.success_replay_buffer.update_success_buffer_with_new_trajectory(self.current_episode_buffer.buffer)
 		
