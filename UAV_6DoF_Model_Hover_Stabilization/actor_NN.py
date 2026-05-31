@@ -9,9 +9,8 @@ import UAV_6DoF_model_environment as uav_env
 import additional_functions as adf
 
 class Actor(tf.keras.Model):
-	def __init__(self, replay_buffer):
+	def __init__(self):
 		super().__init__()
-		self.replay_buffer = replay_buffer
 		self.state = {}
 
 		self.dense_layer_1 = Dense(256, activation = 'relu')
@@ -49,13 +48,6 @@ class Actor(tf.keras.Model):
 	def get_action_vector(self, action_t_batch: tf.Tensor):
 		return action_t_batch[0]
 
-	def test_actor_actions_batching(self):
-		for _ in range(2):
-			batch = self.replay_buffer.get_batch()
-			states_n_batch = self.get_states_n_batch(batch)
-			actions_n_batch = self.get_actions_n_batch(states_n_batch)
-			# print(actions_n_batch)
-
 	def get_actions_n_batch(self):
 		self.stds_tensor = self.get_std_batch(self.log_stds_tensor)
 		normal_noise = tf.random.normal(self.means_tensor.shape)
@@ -90,10 +82,10 @@ class Actor(tf.keras.Model):
 		return np.array(list(batch["state_t"].values))
 
 if __name__ == "__main__":
-	buffer = rb.ReplayBuffer(
-		pd.DataFrame({"state_t": [], "action_t": [], "reward_t": [], "state_tp1": []}),
-		10, 1
-	)
+	buffer = rb.ReplayBuffer(100, 32)
 	buffer.test_buffer_on_random_vectors()
-	actor = Actor(buffer)
-	actor.test_actor_actions_batching()
+	test_batch = buffer.get_batch()
+	states_n_batch = buffer.get_states_actions_rewards_dones_next_states(test_batch)[0]
+	actor = Actor()
+	pred = actor(states_n_batch)
+	print(pred)
