@@ -20,6 +20,7 @@ class UAV_6DoF_Model_Environment:
 		self.delta_t_in_sec = 0.01
 		self.init_state_vector = init_state_vector
 		self.current_state_vector = init_state_vector
+		self.current_state_vector_size = sum([val.shape[0] for val in self.current_state_vector.values()])
 		self.next_state_vector = {"p": [], "v": [], "q": [], "omega": []}
 		self.battery_mass_in_kg = 0.9
 		self.UAV_motor_mass_in_kg = 0.06
@@ -287,7 +288,7 @@ class UAV_6DoF_Model_Environment:
 
 		current_state_vector_reward -= 20 * abs(self.current_state_vector["v"][2]) ** 2
 		current_state_vector_reward -= 30 * abs(z_deviation_from_target) ** 2
-		current_state_vector_reward -= 40 * thrust_hover_deviation ** 2
+		current_state_vector_reward -= 45 * thrust_hover_deviation ** 2
 		current_state_vector_reward += 100 * (self.hover_steps_amount / self.target_hover_steps_amount)
 
 		if self.hover_steps_amount == self.target_hover_steps_amount:
