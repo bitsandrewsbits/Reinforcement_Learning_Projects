@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.models import load_model
 import time
 
 import UAV_6DoF_model_environment as uavme
@@ -40,9 +41,11 @@ episodes: int):
 		self.total_passed_steps = 0
 		self.actor_training_started = False
 		self.uav_model_env = uav_model_env
-		self.actor = act.Actor(self.train_replay_buffer)
+		self.actor = act.Actor()
 		self.critic = crit.Critic()
 		self.target_critic = crit.Critic()
+		self.initialize_actor_NN_weights()
+		self.initialize_critic_NNs_target_critic_NNs_weights()
 		self.tau = 0.004
 		self.update_critic_NNs_period_in_steps = 1
 		self.update_actor_NN_period_in_steps = 2
@@ -60,8 +63,20 @@ episodes: int):
 		self.success_hover_heights_per_episode = {"success_hover_heights_amount": []}
 		self.uav_action_success_trajectories_sequence_amount = 0
 		self.agent_learned_uav_action = False
+		self.success_trained_actor_NN_weights_path = (
+			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][3]}/{gv.SUCCESS_TRAINED_ACTOR_NN_WEIGHTS}"
+		)
+		self.success_trained_critic_NNs_weights_path = (
+			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][4]}/{gv.SUCCESS_TRAINED_CRITIC_NNS_WEIGHTS}"
+		)
+		self.success_target_critic_NNs_weights_path = (
+			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][4]}/{gv.SUCCESS_TARGET_CRITIC_NNS_WEIGHTS}"
+		)
 
 	def main(self):
+		self.load_successfully_trained_actor_NN_weights_if_exist()
+		self.load_successfully_trained_critic_NNs_weights_if_exist()
+		self.load_success_target_critic_NNs_weights_if_exist()
 		start_time = time.time()
 		for i in range(1, self.episodes + 1):
 			if self.agent_learned_uav_action:
@@ -76,6 +91,8 @@ episodes: int):
 			)
 			if self.uav_model_env.success_stage_trajectory and self.actor_training_started:
 				self.uav_action_success_trajectories_sequence_amount += 1
+				self.save_successfully_trained_actor_NN_weights()
+				self.save_successfully_trained_critics_NNs_weights()
 			else:
 				self.uav_action_success_trajectories_sequence_amount = 0
 
@@ -117,9 +134,6 @@ episodes: int):
 					log_actions_batch_probabilities = self.actor.get_log_probabilities()
 					states_actions_batch = self.critic.get_states_actions_batch(states, actions)
 					next_states_actions_batch = self.critic.get_states_actions_batch(next_states, next_actions)
-					if self.init_critic_NNs_weights:
-						self.initialize_critic_NNs_target_critic_NNs_weights(states_actions_batch)
-						self.init_critic_NNs_weights = False
 					self.update_critic_Q1_Q2_trainable_weights(
 						states_actions_batch, next_states_actions_batch, rewards,
 						dones, log_actions_batch_probabilities
@@ -192,11 +206,19 @@ episodes: int):
 		loss_grad = grad.gradient(actor_loss, self.actor.trainable_variables)
 		self.actor_optimizer.apply_gradients(zip(loss_grad, self.actor.trainable_variables))
 
-	def initialize_critic_NNs_target_critic_NNs_weights(self, states_actions_batch):
-		self.critic(states_actions_batch)
-		self.target_critic(states_actions_batch)
-		for (target_critic_var, critic_var) in zip(self.target_critic.variables, self.critic.variables):
-			target_critic_var.assign(critic_var)
+	def initialize_actor_NN_weights(self):
+		states_actions_batch_shape = (1, self.uav_model_env.current_state_vector_size)
+		zeros_states_actions = np.zeros(states_actions_batch_shape)
+		self.actor(zeros_states_actions)
+
+	def initialize_critic_NNs_target_critic_NNs_weights(self):
+		action_space_size = len(self.uav_model_env.action_space_values.values())
+		states_actions_batch_shape = (1, self.uav_model_env.current_state_vector_size + action_space_size)
+		zeros_states_actions = np.zeros(states_actions_batch_shape)
+		self.critic(zeros_states_actions)
+		self.target_critic(zeros_states_actions)
+		# for (target_critic_var, critic_var) in zip(self.target_critic.variables, self.critic.variables):
+		# 	target_critic_var.assign(critic_var)
 
 	def update_target_critic_NNs_weights(self):
 		for (target_critic_var, critic_var) in zip(self.target_critic.variables, self.critic.variables):
@@ -208,6 +230,34 @@ episodes: int):
 		simulations_data_dirs = gv.UAV_ACTIONS_SIMULATIONS_DIRS[action_name]
 		for sim_dir in simulations_data_dirs:
 			adf.create_dir_if_need(sim_dir)
+
+	def save_successfully_trained_actor_NN_weights(self):
+		self.actor.save_weights(
+			self.success_trained_actor_NN_weights_path
+		)
+
+	def save_successfully_trained_critics_NNs_weights(self):
+		self.critic.save_weights(
+			self.success_trained_critic_NNs_weights_path
+		)
+		self.target_critic.save_weights(
+			self.success_target_critic_NNs_weights_path
+		)
+
+	def load_successfully_trained_actor_NN_weights_if_exist(self):
+		if os.path.exists(self.success_trained_actor_NN_weights_path):
+			print("[INFO] Loading last successfully trained actor NN weights...")
+			self.actor.load_weights(self.success_trained_actor_NN_weights_path)
+
+	def load_successfully_trained_critic_NNs_weights_if_exist(self):
+		if os.path.exists(self.success_trained_critic_NNs_weights_path):
+			print("[INFO] Loading last successfully trained critic NNs weights...")
+			self.critic.load_weights(self.success_trained_critic_NNs_weights_path)
+
+	def load_success_target_critic_NNs_weights_if_exist(self):
+		if os.path.exists(self.success_target_critic_NNs_weights_path):
+			print("[INFO] Loading last success target critic NNs weights...")
+			self.target_critic.load_weights(self.success_target_critic_NNs_weights_path)
 
 if __name__ == "__main__":
 	episode_steps = 1000
