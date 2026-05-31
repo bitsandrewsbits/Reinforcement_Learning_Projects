@@ -7,7 +7,7 @@ from random import randint
 import numpy as np
 
 hover_stabilization_height_in_m = 0.5
-hover_stabilization_height_in_sec = 0.5
+hover_stabilization_height_in_sec = 0.7
 max_deviation_hover_stabilization_in_m = 0.02
 episode_steps = 1000
 
@@ -28,7 +28,7 @@ UAV_model_environment_ascent_stage = uavme.UAV_6DoF_Model_Environment(
 UAV_model_environment_hover_stabilization_stage = uavme.UAV_6DoF_Model_Environment(
 	"hover_stabilization", 0.99, {"alpha_xy": 0.5, "alpha_z": 50, "beta": 10, "gamma": 0.5, "delta": 10 ** (-5)},
 	{
-		"p": np.array([0, 0, hover_stabilization_height_in_m + randint(-2, 0) / 100]), "v": np.array([0, 0, 0]),
+		"p": np.array([0, 0, hover_stabilization_height_in_m - max_deviation_hover_stabilization_in_m]), "v": np.array([0, 0, 0]),
 		"q": np.array([1, 0, 0, 0]), "omega": np.array([0, 0, 0])
 	},
 	{
