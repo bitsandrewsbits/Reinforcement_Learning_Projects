@@ -5,9 +5,10 @@ import FPV_6DoF_action_train_simulation as f6ats
 import global_vars as gv
 from random import randint
 import numpy as np
+import os
 
 hover_stabilization_height_in_m = 0.5
-hover_stabilization_height_in_sec = 0.7
+hover_stabilization_height_in_sec = 1.1
 max_deviation_hover_stabilization_in_m = 0.02
 episode_steps = 1000
 
@@ -48,10 +49,21 @@ def main(envs_for_actors_actions: list):
 	actions_simulations_dirs = gv.UAV_ACTIONS_SIMULATIONS_DIRS.keys()
 	for (action_simulations_dirs, env_for_actor_action) in zip(actions_simulations_dirs, envs_for_actors_actions):
 		print(f"[INFO] Simulations - UAV {action_simulations_dirs} agent training...")
+		delete_old_p_vectors_replay_buffers(action_simulations_dirs)
 		fpv_action_actor_training_simulation = f6ats.UAV_6DoF_Action_Simulation(
 			action_simulations_dirs, env_for_actor_action, 128, episode_steps, 300
 		)
 		fpv_action_actor_training_simulation.main()
+
+def delete_old_p_vectors_replay_buffers(uav_action_dirs: str):
+	uav_action_p_vectors_path = gv.UAV_ACTIONS_SIMULATIONS_DIRS[uav_action_dirs][1]
+	uav_action_replay_buffers_path = gv.UAV_ACTIONS_SIMULATIONS_DIRS[uav_action_dirs][2]
+	if os.path.exists(uav_action_p_vectors_path):
+		print("[WARN] UAV Action p-vectors logs already exist! Removing...")
+		os.system(f"rm -r {uav_action_p_vectors_path}")
+	if os.path.exists(uav_action_replay_buffers_path):
+		print("[WARN] UAV Action replay buffers logs already exist! Removing...")
+		os.system(f"rm -r {uav_action_replay_buffers_path}")
 
 if __name__ == "__main__":
 	main(envs_for_actions)
