@@ -8,7 +8,7 @@ import numpy as np
 import os
 
 hover_stabilization_height_in_m = 0.5
-hover_stabilization_height_in_sec = 1.1
+hover_stabilization_height_in_sec = 1
 max_deviation_hover_stabilization_in_m = 0.02
 episode_steps = 1000
 
@@ -40,18 +40,17 @@ UAV_model_environment_hover_stabilization_stage = uavme.UAV_6DoF_Model_Environme
 	max_deviation_hover_stabilization_in_m, episode_steps
 )
 
-envs_for_actions = [
-	UAV_model_environment_ascent_stage,
-	UAV_model_environment_hover_stabilization_stage
-]
+envs_for_actions = {
+	"ascent": UAV_model_environment_ascent_stage,
+	"hover_stabilization": UAV_model_environment_hover_stabilization_stage
+}
 
-def main(envs_for_actors_actions: list):
-	actions_simulations_dirs = gv.UAV_ACTIONS_SIMULATIONS_DIRS.keys()
-	for (action_simulations_dirs, env_for_actor_action) in zip(actions_simulations_dirs, envs_for_actors_actions):
-		print(f"[INFO] Simulations - UAV {action_simulations_dirs} agent training...")
-		delete_old_p_vectors_replay_buffers(action_simulations_dirs)
+def main(envs_for_actors_actions: dict):
+	for (action_name, action_env) in envs_for_actors_actions.items():
+		print(f"[INFO] Simulations - UAV {action_name} agent training...")
+		delete_old_p_vectors_replay_buffers(action_name)
 		fpv_action_actor_training_simulation = f6ats.UAV_6DoF_Action_Simulation(
-			action_simulations_dirs, env_for_actor_action, 128, episode_steps, 300
+			action_name, action_env, 128, episode_steps, 500
 		)
 		fpv_action_actor_training_simulation.main()
 
