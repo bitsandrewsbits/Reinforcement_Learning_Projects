@@ -16,7 +16,7 @@ class Simulations_Logs_Analyzer:
 		self.p_vectors_files_amount = len(os.listdir(self.p_vectors_files_dir_path)) - 1
 		self.episodes_numbers = [i for i in range(1, self.p_vectors_files_amount + 1)]
 		self.success_hover_heights_amount_per_episodes = []
-		self.mean_reward_values_per_episodes = []
+		self.episodes_rewards = []
 		self.max_height_z_per_episodes = []
 		self.steps_per_episodes = []
 		self.Tsum_per_episodes = []
@@ -26,7 +26,7 @@ class Simulations_Logs_Analyzer:
 		self.T_hover = 1.28 * self.UAV_mass_in_kg * 9.8
 
 	def main(self):
-		self.define_mean_reward_steps_Tsum_per_episodes()
+		self.define_episodes_rewards_Tsum_per_episodes()
 		
 		fig, ax = plt.subplots(4, 1)
 		if self.uav_action_name == "ascent":
@@ -35,8 +35,9 @@ class Simulations_Logs_Analyzer:
 		elif self.uav_action_name == "hover_stabilization":
 			self.define_success_hover_heights_per_episodes()
 			self.plot_success_hover_heights_z_per_episodes()
+			# self.plot_max_height_z_per_episodes()
 		
-		self.plot_mean_reward_per_episodes()
+		self.plot_episode_reward_per_episodes()
 		self.plot_steps_amount_per_episodes()
 		self.plot_Tsum_per_episodes()
 		plt.show()
@@ -78,14 +79,14 @@ class Simulations_Logs_Analyzer:
 		plt.legend()
 		plt.grid()
 
-	def plot_mean_reward_per_episodes(self):
+	def plot_episode_reward_per_episodes(self):
 		plt.subplot(4, 1, 3)
 		plt.scatter(
-			self.episodes_numbers, self.mean_reward_values_per_episodes,
+			self.episodes_numbers, self.episodes_rewards,
 			marker = '.', label = "reward"
 		)
 		plt.xlabel("episode")
-		plt.ylabel("reward")
+		plt.ylabel("episode reward")
 		plt.legend()
 		plt.grid()
 
@@ -100,13 +101,13 @@ class Simulations_Logs_Analyzer:
 		plt.legend()
 		plt.grid()
 
-	def define_mean_reward_steps_Tsum_per_episodes(self):
+	def define_episodes_rewards_Tsum_per_episodes(self):
 		for i in self.episodes_numbers:
 			buffer_file_path = f"{self.replay_buffers_dir_path}/{gv.REPLAY_BUFFERS_FILENAME_PATTERN}{i}.jsonl"
 			episode_dataset = self.get_dataset_from_JSONL(buffer_file_path)
-			episode_dataset_mean_reward = self.get_mean_reward_value_from_dataset(episode_dataset)
-			self.mean_reward_values_per_episodes.append(
-				episode_dataset_mean_reward
+			episode_dataset_episode_reward = self.get_episode_reward_value_from_dataset(episode_dataset)
+			self.episodes_rewards.append(
+				episode_dataset_episode_reward
 			)
 			episode_steps = self.get_steps_amount_from_dataset(episode_dataset)
 			self.steps_per_episodes.append(episode_steps)
@@ -138,8 +139,8 @@ class Simulations_Logs_Analyzer:
 		Tsums = [action[0] for action in action_t]
 		return sum(Tsums) / len(Tsums)
 
-	def get_mean_reward_value_from_dataset(self, replay_buffer_dataset: pd.DataFrame):
-		return replay_buffer_dataset["reward_t"].mean()
+	def get_episode_reward_value_from_dataset(self, replay_buffer_dataset: pd.DataFrame):
+		return replay_buffer_dataset["reward_t"].sum()
 
 	def get_steps_amount_from_dataset(self, replay_buffer_dataset: pd.DataFrame):
 		return replay_buffer_dataset.shape[0]
