@@ -23,7 +23,14 @@ class Simulations_Logs_Analyzer:
 		self.battery_mass_in_kg = 0.9
 		self.UAV_motor_mass_in_kg = 0.06
 		self.UAV_mass_in_kg = self.battery_mass_in_kg + 4 * self.UAV_motor_mass_in_kg
-		self.T_hover = 1.28 * self.UAV_mass_in_kg * 9.8
+		self.T_hover = 1.005 * self.UAV_mass_in_kg * 9.8
+		self.index_to_state_vector_component = {
+			0: "x", 1: "y", 2: "z", 3: "vx", 4: "vy", 5: "vz", 6: "q0", 7: "q1",
+			8: "q2", 9: "q3", 10: "omega_x", 11: "omega_y", 12: "omega_z"
+		}
+		self.index_to_action_t_component = {
+			0: "Tsum", 1: "tau_x", 2: "tau_y", 3: "tau_z"
+		}
 
 	def main(self):
 		self.define_episodes_rewards_Tsum_per_episodes()
@@ -145,17 +152,66 @@ class Simulations_Logs_Analyzer:
 	def get_steps_amount_from_dataset(self, replay_buffer_dataset: pd.DataFrame):
 		return replay_buffer_dataset.shape[0]
 
-	def get_dataset_from_JSONL(self, file_path: str):
-		return pd.read_json(
-			file_path, orient = 'records', lines = True
+	def plot_dependencies_with_t(self, vector_components_indexes_names: dict, episode_number: int):
+		plot_amount = len(vector_components_indexes_names.keys())
+		fig, ax = plt.subplots(plot_amount, 1)
+		plot_index = 1
+		for (vector_component_index, vector_component_name) in vector_components_indexes_names.items():
+			plt.subplot(plot_amount, 1, plot_index)
+			self.plot_episode_vector_component_values_with_t(vector_component_name, vector_component_index, episode_number)
+			plot_index += 1
+		plt.show()
+
+	def plot_episode_vector_component_values_with_t(self, vector_name: str, vector_component_index: int, episode_number: int):
+		state_vector_component_name = self.get_vector_component_name(vector_name, vector_component_index)
+		vector_component_values = self.get_vector_component_from_buffer(vector_name, vector_component_index, episode_number)
+		time_steps = [round(t / 100, 2) for t in range(len(vector_component_values))]
+		plt.title(f"Episode-{episode_number}, {state_vector_component_name}(t)")
+		plt.scatter(
+			time_steps, vector_component_values,
+			marker = '.', label = f"{state_vector_component_name}(t)"
 		)
+		plt.xlabel("time, sec")
+		plt.ylabel(f"{state_vector_component_name}, m")
+		plt.legend()
+		plt.grid()
+
+	def get_vector_component_from_buffer(self, vector_name: str, vector_component_index: int, episode_number: int):
+		buffer_file_path = f"{self.replay_buffers_dir_path}/{gv.REPLAY_BUFFERS_FILENAME_PATTERN}{episode_number}.jsonl"
+		episode_dataset = adf.get_dataset_from_JSONL(buffer_file_path)
+		vector_component_values = []
+		for state_vector in episode_dataset[vector_name]:
+			if type(state_vector) == list:
+				vector_component_values.append(state_vector[vector_component_index])
+			else:
+				transition_vector_value = state_vector
+				vector_component_values.append(transition_vector_value)
+
+		return vector_component_values
+
+	def get_vector_component_name(self, vector_name: str, vector_component_index: int):
+		if vector_name == "state_t":
+			return self.index_to_state_vector_component[vector_component_index]
+		elif vector_name == "action_t":
+			return self.index_to_action_t_component[vector_component_index]
+		else:
+			return "reward_t"
 
 if __name__ == "__main__":
 	uav_actions = ["ascent", "hover_stabilization"]
-	for uav_action in uav_actions:
-		p_vectors_analyzer_uav_action = Simulations_Logs_Analyzer(
-			uav_action,
-			gv.UAV_ACTIONS_SIMULATIONS_DIRS[uav_action][2],
-			gv.UAV_ACTIONS_SIMULATIONS_DIRS[uav_action][1]
-		)
-		p_vectors_analyzer_uav_action.main()
+	# for uav_action in uav_actions:
+	# 	p_vectors_analyzer_uav_action = Simulations_Logs_Analyzer(
+	# 		uav_action,
+	# 		gv.UAV_ACTIONS_SIMULATIONS_DIRS[uav_action][2],
+	# 		gv.UAV_ACTIONS_SIMULATIONS_DIRS[uav_action][1]
+	# 	)
+	# 	p_vectors_analyzer_uav_action.main()
+	p_vectors_analyzer_uav_action = Simulations_Logs_Analyzer(
+		"hover_stabilization",
+		gv.UAV_ACTIONS_SIMULATIONS_DIRS["hover_stabilization"][2],
+		gv.UAV_ACTIONS_SIMULATIONS_DIRS["hover_stabilization"][1]
+	)
+	p_vectors_analyzer_uav_action.plot_dependencies_with_t(
+		{2: "state_t", 5: "state_t", 0: "action_t", -1: "reward_t"},
+		173
+	)
