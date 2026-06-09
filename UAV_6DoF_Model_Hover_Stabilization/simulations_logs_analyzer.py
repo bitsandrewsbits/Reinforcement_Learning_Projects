@@ -111,7 +111,7 @@ class Simulations_Logs_Analyzer:
 	def define_episodes_rewards_Tsum_per_episodes(self):
 		for i in self.episodes_numbers:
 			buffer_file_path = f"{self.replay_buffers_dir_path}/{gv.REPLAY_BUFFERS_FILENAME_PATTERN}{i}.jsonl"
-			episode_dataset = self.get_dataset_from_JSONL(buffer_file_path)
+			episode_dataset = adf.get_dataset_from_JSONL(buffer_file_path)
 			episode_dataset_episode_reward = self.get_episode_reward_value_from_dataset(episode_dataset)
 			self.episodes_rewards.append(
 				episode_dataset_episode_reward
@@ -125,7 +125,7 @@ class Simulations_Logs_Analyzer:
 	def define_max_height_z_per_episodes(self):
 		for i in self.episodes_numbers:
 			buffer_file_path = f"{self.p_vectors_files_dir_path}/{gv.P_VECTORS_FILENAME_PATTERN}{i}.jsonl"
-			episode_dataset = self.get_dataset_from_JSONL(buffer_file_path)
+			episode_dataset = adf.get_dataset_from_JSONL(buffer_file_path)
 			episode_dataset_max_z = self.get_max_z_value_from_dataset(episode_dataset)
 			self.max_height_z_per_episodes.append(
 				episode_dataset_max_z
@@ -212,6 +212,6 @@ if __name__ == "__main__":
 		gv.UAV_ACTIONS_SIMULATIONS_DIRS["hover_stabilization"][1]
 	)
 	p_vectors_analyzer_uav_action.plot_dependencies_with_t(
-		{2: "state_t", 5: "state_t", 0: "action_t", -1: "reward_t"},
-		173
+		{0: "state_t", 1: "state_t", 0: "action_t", -1: "reward_t"},
+		220
 	)
