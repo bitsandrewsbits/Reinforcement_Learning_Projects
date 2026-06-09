@@ -9,14 +9,20 @@ import UAV_6DoF_model_environment as uav_env
 import additional_functions as adf
 
 class Actor(tf.keras.Model):
-	def __init__(self):
+	def __init__(self, uav_env = "6DoF_model"):
 		super().__init__()
+		self.uav_env = uav_env
 		self.state = {}
 
 		self.dense_layer_1 = Dense(256, activation = 'relu')
 		self.dense_layer_2 = Dense(256, activation = 'relu')
-		self.mean_batch = Dense(4)
-		self.log_std_batch = Dense(4)
+		if self.uav_env == "6DoF_model":
+			output_values_amount = 4
+		elif self.uav_env == "1D_model":
+			output_values_amount = 1
+		
+		self.mean_batch = Dense(output_values_amount)
+		self.log_std_batch = Dense(output_values_amount)
 
 		self.means_tensor = tf.Tensor()
 		self.stds_tensor = tf.Tensor()
@@ -25,6 +31,7 @@ class Actor(tf.keras.Model):
 		self.action_t_batch = {}
 
 	def call(self, states_n_batch):
+		# print("states_n_batch.shape:", states_n_batch.shape)
 		dense_1 = self.dense_layer_1(states_n_batch)
 		dense_2 = self.dense_layer_2(dense_1)
 		self.means_tensor = self.mean_batch(dense_2)
@@ -38,12 +45,15 @@ class Actor(tf.keras.Model):
 		actions_n_batch = self.get_actions_n_batch()
 		action_vector = self.get_action_vector(actions_n_batch)
 		actions_arr = tf.keras.ops.convert_to_numpy(action_vector)
-		return {
-			"T_sum": actions_arr[0],
-			"tau_x": actions_arr[1],
-			"tau_y": actions_arr[2],
-			"tau_z": actions_arr[3]
-		}
+		if self.uav_env == "6DoF_model":
+			return {
+				"T_sum": actions_arr[0],
+				"tau_x": actions_arr[1],
+				"tau_y": actions_arr[2],
+				"tau_z": actions_arr[3]
+			}
+		elif self.uav_env == "1D_model":
+			return {"T_sum": actions_arr[0]}
 
 	def get_action_vector(self, action_t_batch: tf.Tensor):
 		return action_t_batch[0]
@@ -61,7 +71,7 @@ class Actor(tf.keras.Model):
 		return mean_log_std_batches[0]
 
 	def get_std_batch(self, log_stds_tensor):
-		log_stds_tensor = tf.clip_by_value(log_stds_tensor, -5, 0)
+		log_stds_tensor = tf.clip_by_value(log_stds_tensor, -5, -1)
 		std_batch = tf.exp(log_stds_tensor)
 		return std_batch
 
