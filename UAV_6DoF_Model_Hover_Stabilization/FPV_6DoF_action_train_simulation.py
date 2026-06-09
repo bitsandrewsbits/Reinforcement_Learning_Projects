@@ -9,6 +9,7 @@ from tensorflow.keras.models import load_model
 import time
 
 import UAV_6DoF_model_environment as uavme
+import UAV_1D_model_environment as u1dme
 import replay_buffer as rb
 import actor_NN as act
 import critic_NNs as crit
@@ -17,7 +18,8 @@ import global_vars as gv
 
 class UAV_6DoF_Action_Simulation:
 	def __init__(self, uav_action_name: str, uav_model_env, buffer_batch_size: int, steps_in_episode: int, 
-episodes: int):
+episodes: int, test_mode = "6DoF_model"):
+		self.test_mode = test_mode
 		self.uav_action_name = uav_action_name
 		self.create_dirs_for_simulations(self.uav_action_name)
 		self.steps_in_episode = steps_in_episode
@@ -41,7 +43,7 @@ episodes: int):
 		self.total_passed_steps = 0
 		self.actor_training_started = False
 		self.uav_model_env = uav_model_env
-		self.actor = act.Actor()
+		self.actor = act.Actor(self.test_mode)
 		self.critic = crit.Critic()
 		self.target_critic = crit.Critic()
 		self.initialize_actor_NN_weights()
@@ -50,7 +52,7 @@ episodes: int):
 		self.update_critic_NNs_period_in_steps = 1
 		self.update_actor_NN_period_in_steps = 2
 		self.gamma = self.uav_model_env.discount_gamma
-		self.alpha = 0.3
+		self.alpha = 0.2
 		self.actor_learning_rate = 1 * 10 ** (-5)
 		self.critic_learning_rate = 1 * 10 ** (-4)
 		self.critic_optimizer = Adam(self.critic_learning_rate)
@@ -82,7 +84,7 @@ episodes: int):
 			if self.agent_learned_uav_action:
 				print(f"[SUCCESS] Agent successfully learned action - {self.uav_action_name} !")
 				break
-			self.alpha = max(0.001, self.alpha * (0.995 ** i))
+			# self.alpha = max(0.001, self.alpha * (0.999 ** i))
 			self.current_episode_buffer = rb.ReplayBuffer(self.steps_in_episode, 32)
 			self.uav_model_env.reset_environment()
 			self.start_simulation(i)
@@ -96,7 +98,7 @@ episodes: int):
 			else:
 				self.uav_action_success_trajectories_sequence_amount = 0
 
-			if self.uav_action_success_trajectories_sequence_amount > 20:
+			if self.uav_action_success_trajectories_sequence_amount > 30:
 				self.agent_learned_uav_action = True
 			else:
 				self.agent_learned_uav_action = False
@@ -119,7 +121,7 @@ episodes: int):
 
 	def start_simulation(self, episode_number: int):
 		for step_i in range(self.steps_in_episode):
-			if self.uav_model_env.early_episode_termination:
+			if self.uav_model_env.episode_termination:
 				break
 			train_buffer_size = self.train_replay_buffer.buffer.shape[0]
 			if self.total_passed_steps > self.passed_steps_amount_before_learning:
@@ -143,10 +145,12 @@ episodes: int):
 					self.update_actor_trainable_weights(states)
 
 			current_state = self.uav_model_env.current_state_vector
+			# print(f"step-{step_i}, state_vector:", current_state)
 			action_t = self.actor.get_action(current_state)
 			# print("Action Tsum before scaling:", action_t["T_sum"])
 			action_t["T_sum"] = self.get_action_Tsum_in_hover_representation(action_t["T_sum"])
-			action_t["tau_x"], action_t["tau_y"], action_t["tau_z"] = self.get_scaled_moments_tau(action_t)
+			if self.test_mode == "6DoF_model":
+				action_t["tau_x"], action_t["tau_y"], action_t["tau_z"] = self.get_scaled_moments_tau(action_t)
 			next_state, reward_t, done = self.uav_model_env.step(action_t)
 			transition_vector = self.train_replay_buffer.get_transition_vector(
 				current_state, action_t, reward_t, done, next_state
@@ -154,7 +158,7 @@ episodes: int):
 			self.total_passed_steps += 1
 			
 			self.train_replay_buffer.update_buffer_with_new_transition_vector(transition_vector, self.total_passed_steps)
-			self.current_episode_buffer.add_transition_vector_to_buffer(transition_vector, step_i)
+			self.current_episode_buffer.add_transition_vector_to_buffer(transition_vector)
 
 		# if self.uav_model_env.success_hover_trajectory:
 		# 	self.success_replay_buffer.update_success_buffer_with_new_trajectory(self.current_episode_buffer.buffer)
@@ -164,7 +168,7 @@ episodes: int):
 		self.uav_model_env.save_episode_p_vectors_to_JSONL(episode_number)
 
 	def get_action_Tsum_in_hover_representation(self, action_Tsum):
-		updated_Tsum = self.uav_model_env.hover_action_components["T_sum"] * (1 + 0.2 * action_Tsum)
+		updated_Tsum = self.uav_model_env.hover_action_components["T_sum"] * (1 + 0.02 * action_Tsum)
 
 		return updated_Tsum
 
@@ -217,8 +221,6 @@ episodes: int):
 		zeros_states_actions = np.zeros(states_actions_batch_shape)
 		self.critic(zeros_states_actions)
 		self.target_critic(zeros_states_actions)
-		# for (target_critic_var, critic_var) in zip(self.target_critic.variables, self.critic.variables):
-		# 	target_critic_var.assign(critic_var)
 
 	def update_target_critic_NNs_weights(self):
 		for (target_critic_var, critic_var) in zip(self.target_critic.variables, self.critic.variables):
@@ -261,20 +263,35 @@ episodes: int):
 
 if __name__ == "__main__":
 	episode_steps = 1000
-	UAV_model_environment = uavme.UAV_6DoF_Model_Environment(
-		0.99, {"alpha_xy": 0.5, "alpha_z": 15, "beta": 10, "gamma": 0.05, "delta": 10 ** (-5)},
-		{
-			"p": np.array([0, 0, 0]), "v": np.array([0, 0, 0]),
-			"q": np.array([1, 0, 0, 0]), "omega": np.array([0, 0, 0])
-		},
-		{
-			"p": {"x": ["min_x", "max_x"], "y": ["min_y", "max_y"], "z": [0, "max_height"]},
-			"q": {"q1": [-0.7, 0.7], "q2": [-0.7, 0.7]}, "T_sum": [0, "max_T_sum"]
-		},
-		0.5, 0.1, 0.05, episode_steps
-	)
 	buffer_batch_size = 64
-	fpv_hover_simulation = UAV_6DoF_Action_Simulation(
-		UAV_model_environment, buffer_batch_size, episode_steps, 400
-	)
-	fpv_hover_simulation.main()
+	test_mode = "1D_model"
+	test_uav_action = "hover_stabilization"
+	testing_modes = {
+		"6DoF_model": uavme.UAV_6DoF_Model_Environment(
+			test_uav_action, 0.99,
+			{"alpha_xy": 0.5, "alpha_z": 15, "beta": 10, "gamma": 0.05, "delta": 10 ** (-5)},
+			{
+				"p": np.array([0, 0, 0]), "v": np.array([0, 0, 0]),
+				"q": np.array([1, 0, 0, 0]), "omega": np.array([0, 0, 0])
+			},
+			{
+				"p": {"x": ["min_x", "max_x"], "y": ["min_y", "max_y"], "z": [0, "max_height"]},
+				"q": {"q1": [-0.7, 0.7], "q2": [-0.7, 0.7]}, "T_sum": [0, "max_T_sum"]
+			},
+			0.5, 0.1, 0.05, episode_steps
+		),
+		"1D_model": u1dme.UAV_1D_Model_Environment(
+			test_uav_action,
+			0.99, {"alpha_z": 5, "beta": 0.5, "delta": 2},
+			{
+				"z": np.array([0.48]), "vz": np.array([0])
+			},
+			0.5, 3, 0.02, 1000
+		)
+	}
+	if test_mode in testing_modes.keys():
+		fpv_hover_simulation = UAV_6DoF_Action_Simulation(
+			test_uav_action, testing_modes[test_mode],
+			buffer_batch_size, episode_steps, 500, test_mode
+		)
+		fpv_hover_simulation.main()
