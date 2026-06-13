@@ -33,7 +33,7 @@ class Actor(tf.keras.Model):
 		log_stds_tensor = self.log_std_batch(dense_2)
 
 		mean_std_noise_batch = self.get_mean_std_noise_batch(means_tensor, log_stds_tensor)
-		actions_n_batch = self.get_actions_n_batch(mean_std_noise_batch,means_tensor, log_stds_tensor)
+		actions_n_batch = self.get_actions_n_batch(mean_std_noise_batch)
 		log_probabilities = self.get_log_probabilities(mean_std_noise_batch, means_tensor, log_stds_tensor)
 		# print("Action:", actions_n_batch)
 		# print("Log probs:", log_probabilities)
@@ -45,7 +45,7 @@ class Actor(tf.keras.Model):
 	def get_action_vector(self, action_t_batch: tf.Tensor):
 		return action_t_batch[0]
 
-	def get_actions_n_batch(self, mean_std_noise_batch, means_batch, log_stds_batch):
+	def get_actions_n_batch(self, mean_std_noise_batch):
 		actions_n_batch = tf.tanh(mean_std_noise_batch)
 		return actions_n_batch
 
