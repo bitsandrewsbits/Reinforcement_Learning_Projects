@@ -38,8 +38,8 @@ class ReplayBuffer:
 			print("dones:", dones)
 			print("next_states:", next_states)
 
-	def add_transition_vector_to_buffer(self, transition_vector: pd.DataFrame, episode_step: int):
-		if episode_step < self.buffer_max_transition_vectors:
+	def add_transition_vector_to_buffer(self, transition_vector: pd.DataFrame):
+		if self.buffer.shape[0] < self.buffer_max_transition_vectors:
 			self.buffer = pd.concat([self.buffer, transition_vector], ignore_index = True)
 		else:
 			print("[WARN] Reach max size of buffer!")
@@ -51,9 +51,14 @@ class ReplayBuffer:
 			updated_index = passed_steps % self.buffer_max_transition_vectors
 			self.buffer.loc[updated_index] = transition_vector.loc[0]
 
-	def get_transition_vector(self, state_t: dict, action_t: dict, reward_t: float, done: int, state_tp1: dict):
+	def update_success_buffer_with_new_transition(self, transition_vector: pd.DataFrame):
+		self.buffer = pd.concat([self.buffer, transition_vector], ignore_index = True)
+		if self.buffer.shape[0] + transition_vector.shape[0] > self.buffer_max_transition_vectors:
+			self.buffer = self.buffer[self.buffer.shape[0] - self.buffer_max_transition_vectors:]
+
+	def get_transition_vector(self, state_t: tf.Tensor, action_t: dict, reward_t: float, done: int, state_tp1: dict):
 		transition_vector = {"state_t": [], "action_t": [], "reward_t": [], "target_done": [], "state_tp1": []}
-		transition_vector["state_t"].append(adf.get_values_as_array(state_t))
+		transition_vector["state_t"].append(tf.keras.ops.convert_to_numpy(tf.squeeze(state_t)))
 		transition_vector["action_t"].append(list(action_t.values()))
 		transition_vector["reward_t"].append(reward_t)
 		transition_vector["target_done"].append(done)
@@ -61,8 +66,15 @@ class ReplayBuffer:
 
 		return pd.DataFrame(transition_vector)
 
-	def get_batch(self) -> pd.DataFrame:
-		return self.buffer.sample(self.batch_size, axis = 0)
+	def get_batch(self, success_buffer = None) -> pd.DataFrame:
+		if success_buffer is not None and success_buffer.buffer.shape[0] >= success_buffer.batch_size:
+			result_batch_size = self.batch_size + success_buffer.batch_size
+			train_transitions_batch = self.buffer.sample(self.batch_size, axis = 0)
+			success_transitions_batch = success_buffer.buffer.sample(success_buffer.batch_size, axis = 0)
+			result_batch = pd.concat([train_transitions_batch, success_transitions_batch], ignore_index = True)
+			return result_batch.sample(result_batch_size, axis = 0)
+		else:
+			return self.buffer.sample(self.batch_size, axis = 0)
 
 	def get_states_actions_rewards_dones_next_states(self, batch: pd.DataFrame):
 		states = tf.convert_to_tensor([state for state in batch["state_t"].values])
