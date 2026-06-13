@@ -12,7 +12,7 @@ class UAV_1D_Model_Environment:
 		self.uav_action_name = uav_action_name
 		self.discount_gamma = discount_gamma
 		self.reward_coefs = reward_coefs
-		self.hover_extra_reward = 1
+		self.hover_extra_reward = 5
 		self.reward_crash_penalty = 20
 		self.epsilon = max_diviation_from_hover_height
 		self.hover_steps_amount = 0
@@ -37,7 +37,7 @@ class UAV_1D_Model_Environment:
 			self.hover_stabilization_height_in_m
 		]
 		self.hover_action_components = {
-			"T_sum": 1.0 * self.UAV_mass_in_kg * 9.8
+			"T_sum": self.UAV_mass_in_kg * 9.8
 		}
 		if self.uav_action_name == "ascent":
 			self.action_space_values = {"T_sum": 0.0}
@@ -115,6 +115,15 @@ class UAV_1D_Model_Environment:
 
 		return self.next_state_vector
 
+	def transition_vector_is_success(self, transition: pd.DataFrame):
+		height_z = transition["state_tp1"].values[0][0]
+		speed_vz = transition["state_tp1"].values[0][1]
+		if height_z > self.hover_stabilization_height_in_m - self.epsilon / 2:
+			if height_z < self.hover_stabilization_height_in_m + self.epsilon / 2:
+				if abs(round(speed_vz, 4)) < 0.005:
+					return True
+		return False
+
 	def make_next_state_vector_as_current(self):
 		self.current_state_vector = {
 			"z": self.next_state_vector["z"].copy(),
@@ -189,12 +198,13 @@ class UAV_1D_Model_Environment:
 		current_state_vector_reward = 0
 		if abs(z_deviation_from_target) < self.epsilon:
 			self.hover_steps_amount += 1
-			# current_state_vector_reward += self.hover_extra_reward
+			current_state_vector_reward += (self.hover_extra_reward * (0.1 - 10 * abs(self.current_state_vector["vz"][0])))
 		else:
 			self.hover_steps_amount = 0
 
-		current_state_vector_reward -= 20 * z_deviation_from_target ** 2
-		current_state_vector_reward -= 5 * vz_deviation_from_target ** 2
+		current_state_vector_reward += 10 * (self.hover_steps_amount / self.target_hover_steps_amount)
+		current_state_vector_reward -= 5 * abs(z_deviation_from_target)
+		current_state_vector_reward -= 11 * abs(self.current_state_vector["vz"][0])
 
 		if self.hover_steps_amount == self.target_hover_steps_amount:
 			current_state_vector_reward += 500
