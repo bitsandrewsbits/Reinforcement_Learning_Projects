@@ -206,10 +206,13 @@ if __name__ == "__main__":
 		gv.UAV_ACTIONS_SIMULATIONS_DIRS["hover_stabilization"][2],
 		gv.UAV_ACTIONS_SIMULATIONS_DIRS["hover_stabilization"][1]
 	)
-	p_vectors_analyzer_uav_action.plot_dependencies_with_t(
-		[
-			("state_t", 0, "z"), ("state_t", 1, "vz"),
-			("action_t", 0, "T_sum"), ("reward_t", -1, "reward_t")
-		],
-		61
-	)
+	check_episodes_amount = p_vectors_analyzer_uav_action.p_vectors_files_amount
+	for check_episode_number in range(1, check_episodes_amount + 1):
+		if check_episode_number % 10 == 0:
+			p_vectors_analyzer_uav_action.plot_dependencies_with_t(
+				[
+					("state_t", 0, "z"), ("state_t", 1, "vz"),
+					("action_t", 0, "T_sum"), ("reward_t", -1, "reward_t")
+				],
+				check_episode_number
+			)
