@@ -25,32 +25,35 @@ episodes: int, test_mode = "6DoF_model"):
 		self.steps_in_episode = steps_in_episode
 		self.episodes = episodes
 		self.buffer_batch_size = buffer_batch_size
-		# self.success_transitions_batch_size_percents = 0.35
-		# self.success_transitions_batch_size = int(
-		# 	self.success_transitions_batch_size_percents * self.buffer_batch_size
-		# )
-		# self.train_batch_size = self.buffer_batch_size - self.success_transitions_batch_size
+		self.success_transitions_batch_size_percents = 0.5
+		self.success_transitions_batch_size = int(
+			self.success_transitions_batch_size_percents * self.buffer_batch_size
+		)
+		self.train_batch_size = self.buffer_batch_size - self.success_transitions_batch_size
 		self.passed_steps_amount_before_learning = gv.PASSED_STEPS_BEFORE_LEARNING
 		self.train_buffer_size = 10 ** 5
-		self.success_buffer_size = 10 ** 4
+		self.success_transitions_buffer_size = 10 ** 4
 		self.train_replay_buffer = rb.ReplayBuffer(
 			self.train_buffer_size, self.buffer_batch_size
 		)
-		# self.success_replay_buffer = rb.ReplayBuffer(
-		# 	self.success_buffer_size, self.success_transitions_batch_size
-		# )
+		self.success_transitions_buffer = rb.ReplayBuffer(
+			self.success_transitions_buffer_size, self.success_transitions_batch_size
+		)
 		self.current_episode_buffer = object
+		self.evaluation_episode_buffer = object
 		self.total_passed_steps = 0
 		self.actor_training_started = False
 		self.uav_model_env = uav_model_env
+		self.uav_model_validation_env = uav_model_env
 		self.actor = act.Actor(self.test_mode)
 		self.critic = crit.Critic()
 		self.target_critic = crit.Critic()
 		self.initialize_actor_NN_weights()
 		self.initialize_critic_NNs_target_critic_NNs_weights()
 		self.tau = 0.004
-		self.update_critic_NNs_period_in_steps = 1
-		self.update_actor_NN_period_in_steps = 2
+		self.update_critic_NNs_period_in_steps = 5
+		self.update_actor_NN_period_in_steps = 10
+		self.total_NNs_updates_amount = 0
 		self.gamma = self.uav_model_env.discount_gamma
 		self.alpha = 0.2
 		self.actor_learning_rate = 1 * 10 ** (-4)
@@ -111,9 +114,9 @@ episodes: int, test_mode = "6DoF_model"):
 		adf.save_dataset_to_JSONL(
 			self.train_replay_buffer.buffer, f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][2]}/Train_Buffer.jsonl"
 		)
-		# adf.save_dataset_to_JSONL(
-		# 	self.success_replay_buffer.buffer, f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][2]}/Success_Buffer.jsonl"
-		# )
+		adf.save_dataset_to_JSONL(
+			self.success_transitions_buffer.buffer, f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][2]}/Success_Buffer.jsonl"
+		)
 		end_time = time.time()
 		self.total_simulations_time = end_time - start_time
 		print(f"[INFO] Total simulations time in sec = {self.total_simulations_time}")
@@ -123,17 +126,14 @@ episodes: int, test_mode = "6DoF_model"):
 		for step_i in range(self.steps_in_episode):
 			if self.uav_model_env.episode_termination:
 				break
-			train_buffer_size = self.train_replay_buffer.buffer.shape[0]
 			if self.total_passed_steps > self.passed_steps_amount_before_learning:
 				self.actor_training_started = True
-				buffer_batch = self.train_replay_buffer.get_batch()
+				buffer_batch = self.train_replay_buffer.get_batch(self.success_transitions_buffer)
 				states, actions, rewards, dones, next_states = self.train_replay_buffer.get_states_actions_rewards_dones_next_states(buffer_batch)
 				
 				if step_i % self.update_critic_NNs_period_in_steps == 0:
 					next_states = tf.cast(next_states, tf.float32)
 					next_actions, log_actions_batch_probabilities = self.actor(next_states)
-					# next_actions = self.actor.get_actions_n_batch()
-					# log_actions_batch_probabilities = self.actor.get_log_probabilities()
 					states_actions_batch = self.critic.get_states_actions_batch(states, actions)
 					next_states_actions_batch = self.critic.get_states_actions_batch(next_states, next_actions)
 					self.update_critic_Q1_Q2_trainable_weights(
@@ -142,36 +142,57 @@ episodes: int, test_mode = "6DoF_model"):
 					)
 					self.update_target_critic_NNs_weights()
 				if step_i % self.update_actor_NN_period_in_steps == 0:
+					self.total_NNs_updates_amount += 1
 					self.update_actor_trainable_weights(states)
 
 			current_state = self.uav_model_env.current_state_vector
 			current_state = tf.expand_dims(adf.get_values_as_array(current_state), axis = 0)
 			# print(f"step-{step_i}, state_vector:", current_state)
 			action_t, _ = self.actor(current_state)
-			# print("Action Tsum before scaling:", action_t)
 			self.action_values["T_sum"] = self.get_action_Tsum_in_hover_representation(action_t)
 			if self.test_mode == "6DoF_model":
 				self.action_values["tau_x"], self.action_values["tau_y"], self.action_values["tau_z"] = self.get_scaled_moments_tau(action_t)
-			# print("Action dict:", self.action_values)
 			next_state, reward_t, done = self.uav_model_env.step(self.action_values)
 			transition_vector = self.train_replay_buffer.get_transition_vector(
 				current_state, self.action_values, reward_t, done, next_state
 			)
-			self.total_passed_steps += 1
 			
+			self.total_passed_steps += 1
 			self.train_replay_buffer.update_buffer_with_new_transition_vector(transition_vector, self.total_passed_steps)
 			self.current_episode_buffer.add_transition_vector_to_buffer(transition_vector)
 
-		# if self.uav_model_env.success_hover_trajectory:
-		# 	self.success_replay_buffer.update_success_buffer_with_new_trajectory(self.current_episode_buffer.buffer)
-		
+			if self.uav_model_env.transition_vector_is_success(transition_vector):
+				self.success_transitions_buffer.update_success_buffer_with_new_transition(transition_vector)
+
+			if self.total_NNs_updates_amount % 50 == 0 and self.total_NNs_updates_amount > 0:
+				self.start_evaluation_episode()
+				self.uav_model_validation_env.reset_environment()
+
 		current_episode_buffer_path = f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][2]}/{self.replay_buffer_filename_pattern}{episode_number}.jsonl"
 		adf.save_dataset_to_JSONL(self.current_episode_buffer.buffer, current_episode_buffer_path)
 		self.uav_model_env.save_episode_p_vectors_to_JSONL(episode_number)
 
+	def start_evaluation_episode(self):
+		self.evaluation_episode_buffer = rb.ReplayBuffer(self.steps_in_episode, 32)
+		for step_i in range(self.steps_in_episode):
+			if self.uav_model_validation_env.episode_termination:
+				break
+			current_state = self.uav_model_validation_env.current_state_vector
+			current_state = tf.expand_dims(adf.get_values_as_array(current_state), axis = 0)
+			action_t, _ = self.actor(current_state)
+			self.action_values["T_sum"] = self.get_action_Tsum_in_hover_representation(action_t)
+			if self.test_mode == "6DoF_model":
+				self.action_values["tau_x"], self.action_values["tau_y"], self.action_values["tau_z"] = self.get_scaled_moments_tau(action_t)
+			next_state, reward_t, done = self.uav_model_validation_env.step(self.action_values)
+			transition_vector = self.evaluation_episode_buffer.get_transition_vector(
+				current_state, self.action_values, reward_t, done, next_state
+			)
+			self.evaluation_episode_buffer.add_transition_vector_to_buffer(transition_vector)
+		evaluation_buffer_path = f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][5]}/{gv.EVALUATION_BUFFER_FILENAME_PATTERN}{self.total_NNs_updates_amount}_NNs_updates.jsonl"
+		adf.save_dataset_to_JSONL(self.evaluation_episode_buffer.buffer, evaluation_buffer_path)
+
 	def get_action_Tsum_in_hover_representation(self, action_Tsum: tf.Tensor):
 		action_Tsum_float = tf.keras.ops.convert_to_numpy(action_Tsum)[0][0]
-		# print("T-sum float:", action_Tsum_float)
 		updated_Tsum = self.uav_model_env.hover_action_components["T_sum"] * (1 + 0.02 * action_Tsum_float)
 
 		return updated_Tsum
@@ -267,7 +288,7 @@ episodes: int, test_mode = "6DoF_model"):
 
 if __name__ == "__main__":
 	episode_steps = 1000
-	buffer_batch_size = 64
+	buffer_batch_size = 256
 	test_mode = "1D_model"
 	test_uav_action = "hover_stabilization"
 	testing_modes = {
@@ -296,6 +317,6 @@ if __name__ == "__main__":
 	if test_mode in testing_modes.keys():
 		fpv_hover_simulation = UAV_6DoF_Action_Simulation(
 			test_uav_action, testing_modes[test_mode],
-			buffer_batch_size, episode_steps, 100, test_mode
+			buffer_batch_size, episode_steps, 10, test_mode
 		)
 		fpv_hover_simulation.main()
