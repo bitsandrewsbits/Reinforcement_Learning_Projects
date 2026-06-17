@@ -4,14 +4,16 @@ UAV_ACTIONS_SIMULATIONS_DIRS = {
 		"6DoF_ascent_simulations/p_vectors_in_time",
 		"6DoF_ascent_simulations/replay_buffers",
 		"6DoF_ascent_simulations/trained_actor_model",
-		"6DoF_ascent_simulations/trained_critics_models"
+		"6DoF_ascent_simulations/trained_critics_models",
+		"6DoF_ascent_simulations/evaluation_episodes"
 	],
 	"hover_stabilization": [
 		"6DoF_hover_stabilization_simulations",
 		"6DoF_hover_stabilization_simulations/p_vectors_in_time",
 		"6DoF_hover_stabilization_simulations/replay_buffers",
 		"6DoF_hover_stabilization_simulations/trained_actor_model",
-		"6DoF_hover_stabilization_simulations/trained_critics_models"
+		"6DoF_hover_stabilization_simulations/trained_critics_models",
+		"6DoF_hover_stabilization_simulations/evaluation_episodes"
 	]
 }
 
@@ -25,3 +27,5 @@ SUCCESS_HOVER_HEIGHTS_DATASET_PATH = f"{UAV_ACTIONS_SIMULATIONS_DIRS['hover_stab
 SUCCESS_TRAINED_ACTOR_NN_WEIGHTS = "successfull_actor_NN.weights.h5"
 SUCCESS_TRAINED_CRITIC_NNS_WEIGHTS = "successfull_critic_NNs.weights.h5"
 SUCCESS_TARGET_CRITIC_NNS_WEIGHTS = "successfull_target_critic_NNs.weights.h5"
+
+EVALUATION_BUFFER_FILENAME_PATTERN = "Evaluation_Episode_after_"
