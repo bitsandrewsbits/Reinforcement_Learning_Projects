@@ -28,4 +28,4 @@ SUCCESS_TRAINED_ACTOR_NN_WEIGHTS = "successfull_actor_NN.weights.h5"
 SUCCESS_TRAINED_CRITIC_NNS_WEIGHTS = "successfull_critic_NNs.weights.h5"
 SUCCESS_TARGET_CRITIC_NNS_WEIGHTS = "successfull_target_critic_NNs.weights.h5"
 
-EVALUATION_BUFFER_FILENAME_PATTERN = "Evaluation_Episode_after_"
+EVALUATION_SIMULATIONS_EPISODE_DIR_PATTERN = "Evaluation_Simulations_after_"
