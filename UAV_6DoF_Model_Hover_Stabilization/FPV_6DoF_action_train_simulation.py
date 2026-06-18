@@ -45,6 +45,7 @@ episodes: int, test_env = "6DoF_model"):
 		self.actor_training_started = False
 		self.uav_model_env = self.get_uav_environment()
 		self.uav_model_evaluation_env = self.get_uav_environment()
+		self.uav_model_evaluation_env.evaluation_simulation = True
 		self.actor = act.Actor(self.test_env)
 		self.critic = crit.Critic()
 		self.target_critic = crit.Critic()
@@ -192,14 +193,27 @@ episodes: int, test_env = "6DoF_model"):
 				self.success_transitions_buffer.update_success_buffer_with_new_transition(transition_vector)
 
 			if self.total_NNs_updates_amount % 50 == 0 and self.total_NNs_updates_amount > 0:
-				self.start_evaluation_episode()
-				self.uav_model_evaluation_env.reset_environment()
+				self.run_evaluation_simulations()
 
 		current_episode_buffer_path = f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][2]}/{self.replay_buffer_filename_pattern}{episode_number}.jsonl"
 		adf.save_dataset_to_JSONL(self.current_episode_buffer.buffer, current_episode_buffer_path)
 		self.uav_model_env.save_episode_p_vectors_to_JSONL(episode_number)
 
-	def start_evaluation_episode(self):
+	def run_evaluation_simulations(self):
+		evaluation_simulations_buffers_path = (
+			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][5]}/"
+			f"{gv.EVALUATION_SIMULATIONS_EPISODE_DIR_PATTERN}{self.total_NNs_updates_amount}_actor_updates"
+		)
+		print(evaluation_simulations_buffers_path)
+		if not os.path.exists(evaluation_simulations_buffers_path):
+			os.mkdir(evaluation_simulations_buffers_path)
+		else:
+			return -1
+		for eval_simulation_number in range(1, 10 + 1):
+			self.start_evaluation_episode(evaluation_simulations_buffers_path, eval_simulation_number)
+			self.uav_model_evaluation_env.reset_environment()
+
+	def start_evaluation_episode(self, evaluation_simulations_buffers_path, eval_simulation_number: int):
 		self.evaluation_episode_buffer = rb.ReplayBuffer(self.steps_in_episode, 32)
 		for step_i in range(self.steps_in_episode):
 			if self.uav_model_evaluation_env.episode_termination:
@@ -215,8 +229,8 @@ episodes: int, test_env = "6DoF_model"):
 				current_state, self.action_evaluation_values, reward_t, done, next_state
 			)
 			self.evaluation_episode_buffer.add_transition_vector_to_buffer(transition_vector)
-		evaluation_buffer_path = f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][5]}/{gv.EVALUATION_BUFFER_FILENAME_PATTERN}{self.total_NNs_updates_amount}_NNs_updates.jsonl"
-		adf.save_dataset_to_JSONL(self.evaluation_episode_buffer.buffer, evaluation_buffer_path)
+		evaluation_simulation_buffer_path = f"{evaluation_simulations_buffers_path}/simulation-{eval_simulation_number}.jsonl"
+		adf.save_dataset_to_JSONL(self.evaluation_episode_buffer.buffer, evaluation_simulation_buffer_path)
 
 	def get_action_Tsum_in_hover_representation(self, action_Tsum: tf.Tensor):
 		action_Tsum_float = tf.keras.ops.convert_to_numpy(action_Tsum)[0][0]
