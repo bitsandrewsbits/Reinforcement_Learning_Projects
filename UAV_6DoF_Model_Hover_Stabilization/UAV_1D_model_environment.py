@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import random
 import global_vars as gv
+import copy
 
 class UAV_1D_Model_Environment:
 	def __init__(self, uav_action_name: str, discount_gamma, reward_coefs: dict, 
@@ -53,6 +54,7 @@ class UAV_1D_Model_Environment:
 		self.target_done = 0
 		self.episode_termination = False
 		self.success_stage_trajectory = False
+		self.evaluation_simulation = False
 		self.current_step = 0
 		self.simulation_steps = simulation_steps
 		self.z_height_episode_logs = {"time_in_sec": [], "z": []}
@@ -91,13 +93,20 @@ class UAV_1D_Model_Environment:
 		return next_state_vector, current_state_vector_reward, self.target_done
 
 	def reset_environment(self):
-		self.current_state_vector = self.init_state_vector
+		add_deviation_for_z = 0
+		add_deviation_for_Tsum = 0
+		if self.evaluation_simulation:
+			add_deviation_for_z = random.randint(-2, 20) / 1000
+			add_deviation_for_Tsum = random.randint(-3, 3) / 1000
+
+		self.current_state_vector = copy.deepcopy(self.init_state_vector)
+		self.current_state_vector["z"][0] += add_deviation_for_z
 		self.next_state_vector = {"z": [], "vz": []}
 		if self.uav_action_name == "ascent":
 			self.action_space_values = {"T_sum": 0.0}
 		elif self.uav_action_name == "hover_stabilization":
 			self.action_space_values = {
-				"T_sum": self.hover_action_components["T_sum"]
+				"T_sum": self.hover_action_components["T_sum"] + add_deviation_for_Tsum
 			}
 		self.current_state_vector_reward = 0
 		self.episode_termination = False
@@ -118,8 +127,8 @@ class UAV_1D_Model_Environment:
 	def transition_vector_is_success(self, transition: pd.DataFrame):
 		height_z = transition["state_tp1"].values[0][0]
 		speed_vz = transition["state_tp1"].values[0][1]
-		if height_z > self.hover_stabilization_height_in_m - self.epsilon / 2:
-			if height_z < self.hover_stabilization_height_in_m + self.epsilon / 2:
+		if height_z > self.hover_stabilization_height_in_m - self.epsilon / 1.2:
+			if height_z < self.hover_stabilization_height_in_m + self.epsilon / 1.2:
 				if abs(round(speed_vz, 4)) < 0.005:
 					return True
 		return False
@@ -198,13 +207,13 @@ class UAV_1D_Model_Environment:
 		current_state_vector_reward = 0
 		if abs(z_deviation_from_target) < self.epsilon:
 			self.hover_steps_amount += 1
-			current_state_vector_reward += (self.hover_extra_reward * (0.1 - 10 * abs(self.current_state_vector["vz"][0])))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - 20 * abs(self.current_state_vector["vz"][0] + self.next_state_vector["vz"][0]))
 		else:
 			self.hover_steps_amount = 0
-
-		current_state_vector_reward += 10 * (self.hover_steps_amount / self.target_hover_steps_amount)
-		current_state_vector_reward -= 5 * abs(z_deviation_from_target)
-		current_state_vector_reward -= 11 * abs(self.current_state_vector["vz"][0])
+		
+		# current_state_vector_reward += 50 * (self.hover_steps_amount / self.target_hover_steps_amount)
+		current_state_vector_reward -= 80 * abs(z_deviation_from_target)
+		current_state_vector_reward -= 100 * abs(self.current_state_vector["vz"][0])
 
 		if self.hover_steps_amount == self.target_hover_steps_amount:
 			current_state_vector_reward += 500
