@@ -7,40 +7,104 @@ import matplotlib.pyplot as plt
 
 import global_vars as gv
 import additional_functions as adf
+import argparse
 
 class Simulations_Logs_Analyzer:
-	def __init__(self, uav_action_name: str, replay_buffers_dir_path: str, p_vectors_dir_path: str):
-		self.uav_action_name = uav_action_name
-		self.replay_buffers_dir_path = replay_buffers_dir_path
-		self.p_vectors_files_dir_path = p_vectors_dir_path
-		self.p_vectors_files_amount = len(os.listdir(self.p_vectors_files_dir_path)) - 1
-		self.episodes_numbers = [i for i in range(1, self.p_vectors_files_amount + 1)]
+	def __init__(self):
+		self.selected_uav_action_name = ""
+		self.possible_uav_actions = ["ascent", "hover_stabilization"]
+		self.possible_eval_simul_every_actor_updates_nums = []
+		self.replay_buffers_dir_path = "."
+		self.p_vectors_files_dir_path = "."
+		self.p_vectors_files_amount = 0
+		self.evaluation_episodes_amount = len(os.listdir(gv.UAV_ACTIONS_SIMULATIONS_DIRS["hover_stabilization"][5]))
+		self.uav_action_eval_simulations_amount = [
+			i * gv.RUN_EVALUATION_SIMULATIONS_EVERY_ACTOR_UPDATES for i in range(1, self.evaluation_episodes_amount + 1)
+		]
+		self.episodes_numbers = []
 		self.success_hover_heights_amount_per_episodes = []
 		self.episodes_rewards = []
 		self.max_height_z_per_episodes = []
 		self.steps_per_episodes = []
 		self.Tsum_per_episodes = []
+		self.check_episode_period = 10
 		self.battery_mass_in_kg = 0.9
 		self.UAV_motor_mass_in_kg = 0.06
 		self.UAV_mass_in_kg = self.battery_mass_in_kg + 4 * self.UAV_motor_mass_in_kg
 		self.T_hover = self.UAV_mass_in_kg * 9.8
 
 	def main(self):
-		self.define_episodes_rewards_Tsum_per_episodes()
-		
-		fig, ax = plt.subplots(4, 1)
-		if self.uav_action_name == "ascent":
-			self.define_max_height_z_per_episodes()
-			self.plot_max_height_z_per_episodes()
-		elif self.uav_action_name == "hover_stabilization":
-			self.define_success_hover_heights_per_episodes()
-			self.plot_success_hover_heights_z_per_episodes()
-			# self.plot_max_height_z_per_episodes()
-		
-		self.plot_episode_reward_per_episodes()
-		self.plot_steps_amount_per_episodes()
-		self.plot_Tsum_per_episodes()
-		plt.show()
+		# TODO: think, how to run this script with arguments for diff show-operations.
+		# Main arguments: 
+		# 1) show all uav actions logs stats
+		# 2) show uav action logs stats changing per episodes
+		# 3) show uav one evaluation simulations in one plot for comparison.
+		plots_modes_parser = argparse.ArgumentParser()
+		plots_modes_parser.add_argument(
+			"-act", "--uav_action",
+			choices = ["ascent", "hover_stabilization"],
+			help = "UAV action for simulation."
+		)
+		plots_modes_parser.add_argument(
+			"-auass", "--all_uav_actions_statistics",
+        	help = "Show all uav actions main plots sequentialy."
+		)
+		plots_modes_parser.add_argument(
+			"-oalpe", "--one_action_logs_per_episodes",
+			help = "Show one uav action logs plots per some episodes"
+		)
+		plots_modes_parser.add_argument(
+			"-oaeeau", "--one_action_eval_episode_after_N_actor_updates",
+			choices = self.uav_action_eval_simulations_amount,
+			help = f"Show one action plot with evaluation trajectories after N actor updates."
+		)
+		received_args = plots_modes_parser.parse_args()
+		if received_args.uav_action:
+			self.selected_uav_action_name = received_args.uav_action
+			self.update_all_variables_for_uav_action(self.selected_uav_action_name)
+		elif received_args.all_uav_actions_statistics:
+			fig, ax = plt.subplots(4, 1)
+			for uav_action in self.possible_uav_actions:
+				self.update_all_variables_for_uav_action(uav_action)
+				self.define_episodes_rewards_Tsum_per_episodes()
+				if uav_action == "ascent":
+					self.show_plots_for_ascent_action()
+				elif uav_action == "hover_stabilization":
+					self.show_plots_for_hover_stabilization()
+				self.plot_episode_reward_per_episodes()
+				self.plot_steps_amount_per_episodes()
+				self.plot_Tsum_per_episodes()
+				plt.show()
+		if received_args.one_action_logs_per_episodes:
+			for check_episode_number in range(1, len(self.episodes_numbers) + 1):
+				if check_episode_number % self.check_episode_period == 0:
+					self.plot_dependencies_with_t(
+						[
+							("state_t", 0, "z"), ("state_t", 1, "vz"),
+							("action_t", 0, "T_sum"), ("reward_t", -1, "reward_t")
+						],
+						check_episode_number
+					)
+		if received_args.one_action_evaluation_simulations:
+			pass
+			# TODO: finish uav-action evaluation simulations plot via command
+
+	def update_all_variables_for_uav_action(self, uav_action: str):
+		self.replay_buffers_dir_path = gv.UAV_ACTIONS_SIMULATIONS_DIRS[uav_action][2]
+		self.p_vectors_files_dir_path = gv.UAV_ACTIONS_SIMULATIONS_DIRS[uav_action][1]
+		self.p_vectors_files_amount = len(os.listdir(self.p_vectors_files_dir_path)) - 1
+		self.episodes_numbers = [i for i in range(1, self.p_vectors_files_amount + 1)]
+		self.episodes_rewards = []
+		self.steps_per_episodes = []
+		self.Tsum_per_episodes = []
+
+	def show_plots_for_ascent_action(self):
+		self.define_max_height_z_per_episodes()
+		self.plot_max_height_z_per_episodes()
+
+	def show_plots_for_hover_stabilization(self):
+		self.define_success_hover_heights_per_episodes()
+		self.plot_success_hover_heights_z_per_episodes()
 
 	def plot_max_height_z_per_episodes(self):
 		plt.subplot(4, 1, 1)
@@ -80,6 +144,8 @@ class Simulations_Logs_Analyzer:
 		plt.grid()
 
 	def plot_episode_reward_per_episodes(self):
+		print(len(self.episodes_numbers))
+		print(len(self.episodes_rewards))
 		plt.subplot(4, 1, 3)
 		plt.scatter(
 			self.episodes_numbers, self.episodes_rewards,
@@ -193,26 +259,31 @@ class Simulations_Logs_Analyzer:
 			return "reward_t"
 
 if __name__ == "__main__":
-	uav_actions = ["ascent", "hover_stabilization"]
-	for uav_action in uav_actions:
-		p_vectors_analyzer_uav_action = Simulations_Logs_Analyzer(
-			uav_action,
-			gv.UAV_ACTIONS_SIMULATIONS_DIRS[uav_action][2],
-			gv.UAV_ACTIONS_SIMULATIONS_DIRS[uav_action][1]
-		)
-		p_vectors_analyzer_uav_action.main()
-	p_vectors_analyzer_uav_action = Simulations_Logs_Analyzer(
-		"hover_stabilization",
-		gv.UAV_ACTIONS_SIMULATIONS_DIRS["hover_stabilization"][2],
-		gv.UAV_ACTIONS_SIMULATIONS_DIRS["hover_stabilization"][1]
-	)
-	check_episodes_amount = p_vectors_analyzer_uav_action.p_vectors_files_amount
-	for check_episode_number in range(1, check_episodes_amount + 1):
-		if check_episode_number % 10 == 0:
-			p_vectors_analyzer_uav_action.plot_dependencies_with_t(
-				[
-					("state_t", 0, "z"), ("state_t", 1, "vz"),
-					("action_t", 0, "T_sum"), ("reward_t", -1, "reward_t")
-				],
-				check_episode_number
-			)
+	# 1)
+	# for uav_action in uav_actions:
+	# 	p_vectors_analyzer_uav_action = Simulations_Logs_Analyzer(
+	# 		uav_action,
+	# 		gv.UAV_ACTIONS_SIMULATIONS_DIRS[uav_action][2],
+	# 		gv.UAV_ACTIONS_SIMULATIONS_DIRS[uav_action][1]
+	# 	)
+	# 	p_vectors_analyzer_uav_action.main()
+	
+	# # 2)
+	# p_vectors_analyzer_uav_action = Simulations_Logs_Analyzer(
+	# 	"hover_stabilization",
+	# 	gv.UAV_ACTIONS_SIMULATIONS_DIRS["hover_stabilization"][2],
+	# 	gv.UAV_ACTIONS_SIMULATIONS_DIRS["hover_stabilization"][1]
+	# )
+	# check_episodes_amount = p_vectors_analyzer_uav_action.p_vectors_files_amount
+	# for check_episode_number in range(1, check_episodes_amount + 1):
+	# 	if check_episode_number % 10 == 0:
+	# 		p_vectors_analyzer_uav_action.plot_dependencies_with_t(
+	# 			[
+	# 				("state_t", 0, "z"), ("state_t", 1, "vz"),
+	# 				("action_t", 0, "T_sum"), ("reward_t", -1, "reward_t")
+	# 			],
+	# 			check_episode_number
+	# 		)
+	simulations_logs_analyzer = Simulations_Logs_Analyzer()
+	simulations_logs_analyzer.main()
+	# 3)
