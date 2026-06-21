@@ -192,7 +192,7 @@ episodes: int, test_env = "6DoF_model"):
 			if self.uav_model_env.transition_vector_is_success(transition_vector):
 				self.success_transitions_buffer.update_success_buffer_with_new_transition(transition_vector)
 
-			if self.total_NNs_updates_amount % 50 == 0 and self.total_NNs_updates_amount > 0:
+			if self.total_NNs_updates_amount % gv.RUN_EVALUATION_SIMULATIONS_EVERY_ACTOR_UPDATES == 0 and self.total_NNs_updates_amount > 0:
 				self.run_evaluation_simulations()
 
 		current_episode_buffer_path = f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][2]}/{self.replay_buffer_filename_pattern}{episode_number}.jsonl"
