@@ -19,7 +19,7 @@ class Simulations_Logs_Analyzer:
 		self.p_vectors_files_amount = 0
 		self.evaluation_episodes_amount = len(os.listdir(gv.UAV_ACTIONS_SIMULATIONS_DIRS["hover_stabilization"][5]))
 		self.uav_action_eval_simulations_amount = [
-			i * gv.RUN_EVALUATION_SIMULATIONS_EVERY_ACTOR_UPDATES for i in range(1, self.evaluation_episodes_amount + 1)
+			str(i * gv.RUN_EVALUATION_SIMULATIONS_EVERY_ACTOR_UPDATES) for i in range(1, self.evaluation_episodes_amount + 1)
 		]
 		self.episodes_numbers = []
 		self.success_hover_heights_amount_per_episodes = []
@@ -85,9 +85,15 @@ class Simulations_Logs_Analyzer:
 						],
 						check_episode_number
 					)
-		if received_args.one_action_evaluation_simulations:
-			pass
-			# TODO: finish uav-action evaluation simulations plot via command
+		if received_args.one_action_eval_episode_after_N_actor_updates:
+			actor_updates_number = received_args.one_action_eval_episode_after_N_actor_updates
+			eval_episode_simulations_dir = f"{gv.EVALUATION_SIMULATIONS_EPISODE_DIR_PATTERN}{actor_updates_number}_actor_updates"
+			evaluation_episodes_simulations_pathes = os.listdir(gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.selected_uav_action_name][5])
+			if eval_episode_simulations_dir in evaluation_episodes_simulations_pathes:
+				eval_episode_simulations_path = f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.selected_uav_action_name][5]}/{eval_episode_simulations_dir}"
+				self.plot_evaluation_episodes_simulations(eval_episode_simulations_path)
+			else:
+				print("Your evaluation episode simulations doesn't exist!")
 
 	def update_all_variables_for_uav_action(self, uav_action: str):
 		self.replay_buffers_dir_path = gv.UAV_ACTIONS_SIMULATIONS_DIRS[uav_action][2]
@@ -105,6 +111,28 @@ class Simulations_Logs_Analyzer:
 	def show_plots_for_hover_stabilization(self):
 		self.define_success_hover_heights_per_episodes()
 		self.plot_success_hover_heights_z_per_episodes()
+
+	def plot_evaluation_episodes_simulations(self, eval_episodes_simulations_path: str):
+		eval_episodes_simulations_buffers = os.listdir(eval_episodes_simulations_path)
+		plt.title(eval_episodes_simulations_path.split('/')[-1])
+		for eval_episode_simulations_buffer in eval_episodes_simulations_buffers:
+			eval_episode_simulations_buffer_path = f"{eval_episodes_simulations_path}/{eval_episode_simulations_buffer}"
+			self.plot_height_z_per_episode_step(
+				eval_episode_simulations_buffer_path, eval_episode_simulations_buffer
+			)
+		plt.legend()
+		plt.grid()
+		plt.show()
+
+	def plot_height_z_per_episode_step(self, eval_simulations_buffer_path: str, eval_episode_simulations_buffer):
+		buffer_dataset = adf.get_dataset_from_JSONL(eval_simulations_buffer_path)
+		states_t = buffer_dataset["state_t"]
+		heights_z = [state_t[0] for state_t in states_t]
+		times_t = [i / 100 for i in range(len(heights_z))]
+		plt.scatter(
+			times_t, heights_z,
+			marker = '.', label = f"height-z({eval_episode_simulations_buffer})"
+		)
 
 	def plot_max_height_z_per_episodes(self):
 		plt.subplot(4, 1, 1)
@@ -144,8 +172,6 @@ class Simulations_Logs_Analyzer:
 		plt.grid()
 
 	def plot_episode_reward_per_episodes(self):
-		print(len(self.episodes_numbers))
-		print(len(self.episodes_rewards))
 		plt.subplot(4, 1, 3)
 		plt.scatter(
 			self.episodes_numbers, self.episodes_rewards,
@@ -259,31 +285,5 @@ class Simulations_Logs_Analyzer:
 			return "reward_t"
 
 if __name__ == "__main__":
-	# 1)
-	# for uav_action in uav_actions:
-	# 	p_vectors_analyzer_uav_action = Simulations_Logs_Analyzer(
-	# 		uav_action,
-	# 		gv.UAV_ACTIONS_SIMULATIONS_DIRS[uav_action][2],
-	# 		gv.UAV_ACTIONS_SIMULATIONS_DIRS[uav_action][1]
-	# 	)
-	# 	p_vectors_analyzer_uav_action.main()
-	
-	# # 2)
-	# p_vectors_analyzer_uav_action = Simulations_Logs_Analyzer(
-	# 	"hover_stabilization",
-	# 	gv.UAV_ACTIONS_SIMULATIONS_DIRS["hover_stabilization"][2],
-	# 	gv.UAV_ACTIONS_SIMULATIONS_DIRS["hover_stabilization"][1]
-	# )
-	# check_episodes_amount = p_vectors_analyzer_uav_action.p_vectors_files_amount
-	# for check_episode_number in range(1, check_episodes_amount + 1):
-	# 	if check_episode_number % 10 == 0:
-	# 		p_vectors_analyzer_uav_action.plot_dependencies_with_t(
-	# 			[
-	# 				("state_t", 0, "z"), ("state_t", 1, "vz"),
-	# 				("action_t", 0, "T_sum"), ("reward_t", -1, "reward_t")
-	# 			],
-	# 			check_episode_number
-	# 		)
 	simulations_logs_analyzer = Simulations_Logs_Analyzer()
 	simulations_logs_analyzer.main()
-	# 3)
