@@ -118,7 +118,6 @@ episodes: int, test_env = "6DoF_model"):
 				break
 			self.current_episode_buffer = rb.ReplayBuffer(self.steps_in_episode, 32)
 			self.start_simulation(i)
-			self.uav_model_env.reset_environment()
 			self.success_hover_heights_per_episode["success_hover_heights_amount"].append(
 				self.uav_model_env.hover_steps_amount
 			)
@@ -130,6 +129,7 @@ episodes: int, test_env = "6DoF_model"):
 			else:
 				self.uav_action_success_trajectories_sequence_amount = 0
 
+			self.uav_model_env.reset_environment()
 			if self.uav_action_success_trajectories_sequence_amount > 20:
 				self.agent_learned_uav_action = True
 			else:
@@ -204,7 +204,6 @@ episodes: int, test_env = "6DoF_model"):
 			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][5]}/"
 			f"{gv.EVALUATION_SIMULATIONS_EPISODE_DIR_PATTERN}{self.total_NNs_updates_amount}_actor_updates"
 		)
-		print(evaluation_simulations_buffers_path)
 		if not os.path.exists(evaluation_simulations_buffers_path):
 			os.mkdir(evaluation_simulations_buffers_path)
 		else:
@@ -328,12 +327,12 @@ episodes: int, test_env = "6DoF_model"):
 			self.target_critic.load_weights(self.success_target_critic_NNs_weights_path)
 
 if __name__ == "__main__":
-	episode_steps = 1000
+	episode_steps = 2000
 	buffer_batch_size = 256
 	test_env = "1D_model"
 	test_uav_action = "hover_stabilization"
 	fpv_hover_simulation = UAV_6DoF_Action_Simulation(
 		test_uav_action, buffer_batch_size,
-		episode_steps, 10, test_env
+		episode_steps, 100, test_env
 	)
 	fpv_hover_simulation.main()
