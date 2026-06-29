@@ -14,6 +14,7 @@ class Simulations_Logs_Analyzer:
 		self.selected_uav_action_name = ""
 		self.possible_uav_actions = ["ascent", "hover_stabilization"]
 		self.possible_eval_simul_every_actor_updates_nums = []
+		self.possible_episodes_plots_periods_values = [str(2 * i) for i in range(1, 50)]
 		self.replay_buffers_dir_path = "."
 		self.p_vectors_files_dir_path = "."
 		self.p_vectors_files_amount = 0
@@ -51,6 +52,7 @@ class Simulations_Logs_Analyzer:
 		)
 		plots_modes_parser.add_argument(
 			"-oalpe", "--one_action_logs_per_episodes",
+			choices = self.possible_episodes_plots_periods_values,
 			help = "Show one uav action logs plots per some episodes"
 		)
 		plots_modes_parser.add_argument(
@@ -76,8 +78,9 @@ class Simulations_Logs_Analyzer:
 				self.plot_Tsum_per_episodes()
 				plt.show()
 		if received_args.one_action_logs_per_episodes:
+			check_episode_number_period = int(received_args.one_action_logs_per_episodes)
 			for check_episode_number in range(1, len(self.episodes_numbers) + 1):
-				if check_episode_number % self.check_episode_period == 0:
+				if check_episode_number % check_episode_number_period == 0:
 					self.plot_dependencies_with_t(
 						[
 							("state_t", 0, "z"), ("state_t", 1, "vz"),
