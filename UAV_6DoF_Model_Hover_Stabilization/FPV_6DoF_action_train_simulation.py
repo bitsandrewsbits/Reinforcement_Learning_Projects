@@ -68,7 +68,8 @@ episodes: int, test_env = "6DoF_model"):
 		self.replay_buffer_filename_pattern = gv.REPLAY_BUFFERS_FILENAME_PATTERN
 
 		self.success_hover_heights_per_episode = {"success_hover_heights_amount": []}
-		self.uav_action_success_trajectories_sequence_amount = 0
+		self.uav_action_success_trajectories_sequence_length = 0
+		self.target_success_trajectories_sequence_length = 10
 		self.agent_learned_uav_action = False
 		self.success_trained_actor_NN_weights_path = (
 			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][3]}/{gv.SUCCESS_TRAINED_ACTOR_NN_WEIGHTS}"
@@ -122,15 +123,15 @@ episodes: int, test_env = "6DoF_model"):
 				self.uav_model_env.hover_steps_amount
 			)
 			if self.uav_model_env.success_stage_trajectory and self.actor_training_started:
-				self.uav_action_success_trajectories_sequence_amount += 1
+				self.uav_action_success_trajectories_sequence_length += 1
 				self.save_successfully_trained_actor_NN_weights()
 				self.save_successfully_trained_critics_NNs_weights()
 				self.alpha = self.alpha * 0.95
 			else:
-				self.uav_action_success_trajectories_sequence_amount = 0
+				self.uav_action_success_trajectories_sequence_length = 0
 
 			self.uav_model_env.reset_environment()
-			if self.uav_action_success_trajectories_sequence_amount > 20:
+			if self.uav_action_success_trajectories_sequence_length > self.target_success_trajectories_sequence_length:
 				self.agent_learned_uav_action = True
 			else:
 				self.agent_learned_uav_action = False
@@ -152,6 +153,7 @@ episodes: int, test_env = "6DoF_model"):
 		print(f"[INFO] Total passed steps = {self.total_passed_steps}")
 
 	def start_simulation(self, episode_number: int):
+		print(f"Running Episode #{episode_number}...")
 		for step_i in range(self.steps_in_episode):
 			if self.uav_model_env.episode_termination:
 				break
@@ -333,6 +335,6 @@ if __name__ == "__main__":
 	test_uav_action = "hover_stabilization"
 	fpv_hover_simulation = UAV_6DoF_Action_Simulation(
 		test_uav_action, buffer_batch_size,
-		episode_steps, 100, test_env
+		episode_steps, 400, test_env
 	)
 	fpv_hover_simulation.main()
