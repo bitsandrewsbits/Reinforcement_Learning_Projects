@@ -20,7 +20,7 @@ class Simulations_Logs_Analyzer:
 		self.p_vectors_files_amount = 0
 		self.evaluation_episodes_amount = len(os.listdir(gv.UAV_ACTIONS_SIMULATIONS_DIRS["hover_stabilization"][5]))
 		self.uav_action_eval_simulations_amount = [
-			str(i * gv.RUN_EVALUATION_SIMULATIONS_EVERY_ACTOR_UPDATES) for i in range(1, self.evaluation_episodes_amount + 1)
+			str(i * gv.RUN_EVAL_SIMULATIONS_EVERY_ACTOR_UPDATES) for i in range(1, self.evaluation_episodes_amount + 1)
 		]
 		self.episodes_numbers = []
 		self.success_hover_heights_amount_per_episodes = []
@@ -35,11 +35,6 @@ class Simulations_Logs_Analyzer:
 		self.T_hover = self.UAV_mass_in_kg * 9.8
 
 	def main(self):
-		# TODO: think, how to run this script with arguments for diff show-operations.
-		# Main arguments: 
-		# 1) show all uav actions logs stats
-		# 2) show uav action logs stats changing per episodes
-		# 3) show uav one evaluation simulations in one plot for comparison.
 		plots_modes_parser = argparse.ArgumentParser()
 		plots_modes_parser.add_argument(
 			"-act", "--uav_action",
@@ -58,12 +53,17 @@ class Simulations_Logs_Analyzer:
 		plots_modes_parser.add_argument(
 			"-oaeeau", "--one_action_eval_episode_after_N_actor_updates",
 			choices = self.uav_action_eval_simulations_amount,
-			help = f"Show one action plot with evaluation trajectories after N actor updates."
+			help = "Show one action plot with evaluation trajectories after N actor updates."
+		)
+		plots_modes_parser.add_argument(
+			"-saeeaast", "--show_all_eval_episodes_after_actor_success_trajectories",
+			help = "Show all eval episodes after each actor success trajectory."
 		)
 		received_args = plots_modes_parser.parse_args()
 		if received_args.uav_action:
 			self.selected_uav_action_name = received_args.uav_action
 			self.update_all_variables_for_uav_action(self.selected_uav_action_name)
+
 		elif received_args.all_uav_actions_statistics:
 			fig, ax = plt.subplots(4, 1)
 			for uav_action in self.possible_uav_actions:
@@ -77,6 +77,7 @@ class Simulations_Logs_Analyzer:
 				self.plot_steps_amount_per_episodes()
 				self.plot_Tsum_per_episodes()
 				plt.show()
+
 		if received_args.one_action_logs_per_episodes:
 			check_episode_number_period = int(received_args.one_action_logs_per_episodes)
 			for check_episode_number in range(1, len(self.episodes_numbers) + 1):
@@ -88,15 +89,33 @@ class Simulations_Logs_Analyzer:
 						],
 						check_episode_number
 					)
+
 		if received_args.one_action_eval_episode_after_N_actor_updates:
 			actor_updates_number = received_args.one_action_eval_episode_after_N_actor_updates
-			eval_episode_simulations_dir = f"{gv.EVALUATION_SIMULATIONS_EPISODE_DIR_PATTERN}{actor_updates_number}_actor_updates"
-			evaluation_episodes_simulations_pathes = os.listdir(gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.selected_uav_action_name][5])
-			if eval_episode_simulations_dir in evaluation_episodes_simulations_pathes:
-				eval_episode_simulations_path = f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.selected_uav_action_name][5]}/{eval_episode_simulations_dir}"
+			eval_episode_simulations_dir = f"{gv.EVAL_SIMULATIONS_N_ACTOR_UPDATES_EPISODE_DIR_PATTERN}{actor_updates_number}_actor_updates"
+			eval_episodes_simulations_after_actor_updates_path = gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.selected_uav_action_name][5]
+			eval_episodes_simulations_dirs = os.listdir(eval_episodes_simulations_after_actor_updates_path)
+			if eval_episode_simulations_dir in eval_episodes_simulations_dirs:
+				eval_episode_simulations_path = f"{eval_episodes_simulations_after_actor_updates_path}/{eval_episode_simulations_dir}"
 				self.plot_evaluation_episodes_simulations(eval_episode_simulations_path)
 			else:
 				print("Your evaluation episode simulations doesn't exist!")
+
+		if received_args.show_all_eval_episodes_after_actor_success_trajectories:
+			eval_episode_simulations_after_actor_success_dir = (
+				f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.selected_uav_action_name][6]}"
+			)
+			evaluation_episodes_simulations_dirs = os.listdir(eval_episode_simulations_after_actor_success_dir)
+			for simulations_after_n_success_trajectories in range(1, len(evaluation_episodes_simulations_dirs) + 1):
+				eval_episode_simulations_dir = (
+					f"{gv.EVAL_SIMULATIONS_AFTER_ACTOR_SUCCESS_TRAJECTORIES_DIR_PATTERN}"
+					f"{simulations_after_n_success_trajectories}_success_trajectories"
+				)
+				if eval_episode_simulations_dir in evaluation_episodes_simulations_dirs:
+					eval_episode_simulations_path = f"{eval_episode_simulations_after_actor_success_dir}/{eval_episode_simulations_dir}"
+					self.plot_evaluation_episodes_simulations(eval_episode_simulations_path)
+				else:
+					print("Your evaluation episode simulations doesn't exist!")
 
 	def update_all_variables_for_uav_action(self, uav_action: str):
 		self.replay_buffers_dir_path = gv.UAV_ACTIONS_SIMULATIONS_DIRS[uav_action][2]
