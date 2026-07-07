@@ -127,6 +127,7 @@ episodes: int, test_env = "6DoF_model"):
 				self.save_successfully_trained_actor_NN_weights()
 				self.save_successfully_trained_critics_NNs_weights()
 				self.alpha = self.alpha * 0.95
+				self.run_evaluation_simulations(actor_success_trajectory = True)
 			else:
 				self.uav_action_success_trajectories_sequence_length = 0
 
@@ -194,18 +195,26 @@ episodes: int, test_env = "6DoF_model"):
 			if self.uav_model_env.transition_vector_is_success(transition_vector):
 				self.success_transitions_buffer.update_success_buffer_with_new_transition(transition_vector)
 
-			if self.total_NNs_updates_amount % gv.RUN_EVALUATION_SIMULATIONS_EVERY_ACTOR_UPDATES == 0 and self.total_NNs_updates_amount > 0:
+			if self.total_NNs_updates_amount % gv.RUN_EVAL_SIMULATIONS_EVERY_ACTOR_UPDATES == 0 and self.total_NNs_updates_amount > 0:
 				self.run_evaluation_simulations()
 
 		current_episode_buffer_path = f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][2]}/{self.replay_buffer_filename_pattern}{episode_number}.jsonl"
 		adf.save_dataset_to_JSONL(self.current_episode_buffer.buffer, current_episode_buffer_path)
 		self.uav_model_env.save_episode_p_vectors_to_JSONL(episode_number)
 
-	def run_evaluation_simulations(self):
-		evaluation_simulations_buffers_path = (
-			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][5]}/"
-			f"{gv.EVALUATION_SIMULATIONS_EPISODE_DIR_PATTERN}{self.total_NNs_updates_amount}_actor_updates"
-		)
+	def run_evaluation_simulations(self, actor_success_trajectory = False):
+		if actor_success_trajectory:
+			evaluation_simulations_buffers_path = (
+				f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][6]}/"
+				f"{gv.EVAL_SIMULATIONS_AFTER_ACTOR_SUCCESS_TRAJECTORIES_DIR_PATTERN}"
+				f"{self.uav_action_success_trajectories_sequence_length}_success_trajectories"
+			)
+		else:
+			evaluation_simulations_buffers_path = (
+				f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][5]}/"
+				f"{gv.EVAL_SIMULATIONS_N_ACTOR_UPDATES_EPISODE_DIR_PATTERN}"
+				f"{self.total_NNs_updates_amount}_actor_updates"
+			)
 		if not os.path.exists(evaluation_simulations_buffers_path):
 			os.mkdir(evaluation_simulations_buffers_path)
 		else:
@@ -335,6 +344,6 @@ if __name__ == "__main__":
 	test_uav_action = "hover_stabilization"
 	fpv_hover_simulation = UAV_6DoF_Action_Simulation(
 		test_uav_action, buffer_batch_size,
-		episode_steps, 400, test_env
+		episode_steps, 500, test_env
 	)
 	fpv_hover_simulation.main()
