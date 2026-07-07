@@ -5,7 +5,8 @@ UAV_ACTIONS_SIMULATIONS_DIRS = {
 		"6DoF_ascent_simulations/replay_buffers",
 		"6DoF_ascent_simulations/trained_actor_model",
 		"6DoF_ascent_simulations/trained_critics_models",
-		"6DoF_ascent_simulations/evaluation_episodes"
+		"6DoF_ascent_simulations/eval_episodes_after_actor_updates",
+		"6DoF_ascent_simulations/eval_episodes_after_actor_success_trajectories"
 	],
 	"hover_stabilization": [
 		"6DoF_hover_stabilization_simulations",
@@ -13,7 +14,8 @@ UAV_ACTIONS_SIMULATIONS_DIRS = {
 		"6DoF_hover_stabilization_simulations/replay_buffers",
 		"6DoF_hover_stabilization_simulations/trained_actor_model",
 		"6DoF_hover_stabilization_simulations/trained_critics_models",
-		"6DoF_hover_stabilization_simulations/evaluation_episodes"
+		"6DoF_hover_stabilization_simulations/eval_episodes_after_actor_updates",
+		"6DoF_hover_stabilization_simulations/eval_episodes_after_actor_success_trajectories"
 	]
 }
 
@@ -28,5 +30,6 @@ SUCCESS_TRAINED_ACTOR_NN_WEIGHTS = "successfull_actor_NN.weights.h5"
 SUCCESS_TRAINED_CRITIC_NNS_WEIGHTS = "successfull_critic_NNs.weights.h5"
 SUCCESS_TARGET_CRITIC_NNS_WEIGHTS = "successfull_target_critic_NNs.weights.h5"
 
-RUN_EVALUATION_SIMULATIONS_EVERY_ACTOR_UPDATES = 50
-EVALUATION_SIMULATIONS_EPISODE_DIR_PATTERN = "Evaluation_Simulations_after_"
+RUN_EVAL_SIMULATIONS_EVERY_ACTOR_UPDATES = 500
+EVAL_SIMULATIONS_N_ACTOR_UPDATES_EPISODE_DIR_PATTERN = "Eval_Simulations_after_"
+EVAL_SIMULATIONS_AFTER_ACTOR_SUCCESS_TRAJECTORIES_DIR_PATTERN = "Eval_Simulations_after_"
