@@ -55,6 +55,7 @@ class UAV_1D_Model_Environment:
 		self.episode_termination = False
 		self.success_stage_trajectory = False
 		self.evaluation_simulation = False
+		self.train_evaluation = True
 		self.current_step = 0
 		self.simulation_steps = simulation_steps
 		self.z_height_episode_logs = {"time_in_sec": [], "z": []}
@@ -98,6 +99,12 @@ class UAV_1D_Model_Environment:
 		if self.evaluation_simulation:
 			add_deviation_for_z = random.randint(-2, 20) / 1000
 			add_deviation_for_Tsum = random.randint(-3, 3) / 1000
+			if self.train_evaluation:
+				self.hover_time_in_sec = random.randint(5, 9)
+			else:
+				self.hover_time_in_sec = random.randint(5, 300)
+			self.target_hover_steps_amount = int(self.hover_time_in_sec / self.delta_t_in_sec)
+			self.simulation_steps = self.target_hover_steps_amount
 
 		self.current_state_vector = copy.deepcopy(self.init_state_vector)
 		self.current_state_vector["z"][0] += add_deviation_for_z
@@ -207,13 +214,11 @@ class UAV_1D_Model_Environment:
 		current_state_vector_reward = 0
 		if abs(z_deviation_from_target) < self.epsilon:
 			self.hover_steps_amount += 1
-			current_state_vector_reward += self.hover_extra_reward * (0.1 - 20 * abs(self.current_state_vector["vz"][0] + self.next_state_vector["vz"][0]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - 45 * abs(self.current_state_vector["vz"][0] + self.next_state_vector["vz"][0]))
 		else:
 			self.hover_steps_amount = 0
-		
-		# current_state_vector_reward += 50 * (self.hover_steps_amount / self.target_hover_steps_amount)
-		current_state_vector_reward -= 80 * abs(z_deviation_from_target)
-		current_state_vector_reward -= 100 * abs(self.current_state_vector["vz"][0])
+		current_state_vector_reward -= 90 * abs(z_deviation_from_target)
+		current_state_vector_reward -= 110 * abs(self.current_state_vector["vz"][0])
 
 		if self.hover_steps_amount == self.target_hover_steps_amount:
 			current_state_vector_reward += 500
