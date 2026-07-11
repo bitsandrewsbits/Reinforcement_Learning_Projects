@@ -209,12 +209,15 @@ episodes: int, test_env = "6DoF_model"):
 				f"{gv.EVAL_SIMULATIONS_AFTER_ACTOR_SUCCESS_TRAJECTORIES_DIR_PATTERN}"
 				f"{self.uav_action_success_trajectories_sequence_length}_success_trajectories"
 			)
+			self.uav_model_evaluation_env.train_evaluation = False
 		else:
 			evaluation_simulations_buffers_path = (
 				f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][5]}/"
 				f"{gv.EVAL_SIMULATIONS_N_ACTOR_UPDATES_EPISODE_DIR_PATTERN}"
 				f"{self.total_NNs_updates_amount}_actor_updates"
 			)
+			self.uav_model_evaluation_env.train_evaluation = True
+
 		if not os.path.exists(evaluation_simulations_buffers_path):
 			os.mkdir(evaluation_simulations_buffers_path)
 		else:
@@ -224,8 +227,9 @@ episodes: int, test_env = "6DoF_model"):
 			self.uav_model_evaluation_env.reset_environment()
 
 	def start_evaluation_episode(self, evaluation_simulations_buffers_path, eval_simulation_number: int):
-		self.evaluation_episode_buffer = rb.ReplayBuffer(self.steps_in_episode, 32)
-		for step_i in range(self.steps_in_episode):
+		steps_in_eval_episode = self.uav_model_evaluation_env.simulation_steps
+		self.evaluation_episode_buffer = rb.ReplayBuffer(steps_in_eval_episode, 32)
+		for step_i in range(steps_in_eval_episode):
 			if self.uav_model_evaluation_env.episode_termination:
 				break
 			current_state = self.uav_model_evaluation_env.current_state_vector
@@ -344,6 +348,6 @@ if __name__ == "__main__":
 	test_uav_action = "hover_stabilization"
 	fpv_hover_simulation = UAV_6DoF_Action_Simulation(
 		test_uav_action, buffer_batch_size,
-		episode_steps, 500, test_env
+		episode_steps, 400, test_env
 	)
 	fpv_hover_simulation.main()
