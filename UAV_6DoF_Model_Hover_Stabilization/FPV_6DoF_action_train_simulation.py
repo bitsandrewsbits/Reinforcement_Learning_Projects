@@ -32,7 +32,7 @@ episodes: int, test_env = "6DoF_model"):
 		self.train_batch_size = self.buffer_batch_size - self.success_transitions_batch_size
 		self.passed_steps_amount_before_learning = gv.PASSED_STEPS_BEFORE_LEARNING
 		self.train_buffer_size = 10 ** 5
-		self.success_transitions_buffer_size = 10 ** 4
+		self.success_transitions_buffer_size = 3 * 10 ** 3
 		self.train_replay_buffer = rb.ReplayBuffer(
 			self.train_buffer_size, self.buffer_batch_size
 		)
@@ -72,13 +72,13 @@ episodes: int, test_env = "6DoF_model"):
 		self.target_success_trajectories_sequence_length = 10
 		self.agent_learned_uav_action = False
 		self.success_trained_actor_NN_weights_path = (
-			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][3]}/{gv.SUCCESS_TRAINED_ACTOR_NN_WEIGHTS}"
+			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.test_env][self.uav_action_name][3]}/{gv.SUCCESS_TRAINED_ACTOR_NN_WEIGHTS}"
 		)
 		self.success_trained_critic_NNs_weights_path = (
-			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][4]}/{gv.SUCCESS_TRAINED_CRITIC_NNS_WEIGHTS}"
+			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.test_env][self.uav_action_name][4]}/{gv.SUCCESS_TRAINED_CRITIC_NNS_WEIGHTS}"
 		)
 		self.success_target_critic_NNs_weights_path = (
-			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][4]}/{gv.SUCCESS_TARGET_CRITIC_NNS_WEIGHTS}"
+			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.test_env][self.uav_action_name][4]}/{gv.SUCCESS_TARGET_CRITIC_NNS_WEIGHTS}"
 		)
 
 	def get_uav_environment(self):
@@ -106,7 +106,7 @@ episodes: int, test_env = "6DoF_model"):
 				0.5, 8, 0.02, episode_steps
 			)
 		else:
-			raise Exception(f"[WARN]Error! You test_env={test_env} doesn't exist in simulator!")
+			raise Exception(f"[WARN]Error! You test_env={self.test_env} doesn't exist in simulator!")
 
 	def main(self):
 		self.load_successfully_trained_actor_NN_weights_if_exist()
@@ -140,13 +140,15 @@ episodes: int, test_env = "6DoF_model"):
 		if self.uav_action_name == "hover_stabilization":
 			adf.save_dataset_to_JSONL(
 				pd.DataFrame(self.success_hover_heights_per_episode),
-				gv.SUCCESS_HOVER_HEIGHTS_DATASET_PATH
+				f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.test_env]['hover_stabilization'][1]}/{gv.SUCCESS_HOVER_HEIGHTS_DATASET}"
 			)
 		adf.save_dataset_to_JSONL(
-			self.train_replay_buffer.buffer, f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][2]}/Train_Buffer.jsonl"
+			self.train_replay_buffer.buffer,
+			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.test_env][self.uav_action_name][2]}/Train_Buffer.jsonl"
 		)
 		adf.save_dataset_to_JSONL(
-			self.success_transitions_buffer.buffer, f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][2]}/Success_Buffer.jsonl"
+			self.success_transitions_buffer.buffer,
+			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.test_env][self.uav_action_name][2]}/Success_Buffer.jsonl"
 		)
 		end_time = time.time()
 		self.total_simulations_time = end_time - start_time
@@ -182,6 +184,7 @@ episodes: int, test_env = "6DoF_model"):
 			action_t, _ = self.actor(current_state)
 			self.action_values["T_sum"] = self.get_action_Tsum_in_hover_representation(action_t)
 			if self.test_env == "6DoF_model":
+				action_t = tf.squeeze(action_t)
 				self.action_values["tau_x"], self.action_values["tau_y"], self.action_values["tau_z"] = self.get_scaled_moments_tau(action_t)
 			next_state, reward_t, done = self.uav_model_env.step(self.action_values)
 			transition_vector = self.train_replay_buffer.get_transition_vector(
@@ -198,21 +201,24 @@ episodes: int, test_env = "6DoF_model"):
 			if self.total_NNs_updates_amount % gv.RUN_EVAL_SIMULATIONS_EVERY_ACTOR_UPDATES == 0 and self.total_NNs_updates_amount > 0:
 				self.run_evaluation_simulations()
 
-		current_episode_buffer_path = f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][2]}/{self.replay_buffer_filename_pattern}{episode_number}.jsonl"
+		current_episode_buffer_path = (
+			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.test_env][self.uav_action_name][2]}/"
+			f"{self.replay_buffer_filename_pattern}{episode_number}.jsonl"
+		)
 		adf.save_dataset_to_JSONL(self.current_episode_buffer.buffer, current_episode_buffer_path)
 		self.uav_model_env.save_episode_p_vectors_to_JSONL(episode_number)
 
 	def run_evaluation_simulations(self, actor_success_trajectory = False):
 		if actor_success_trajectory:
 			evaluation_simulations_buffers_path = (
-				f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][6]}/"
+				f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.test_env][self.uav_action_name][6]}/"
 				f"{gv.EVAL_SIMULATIONS_AFTER_ACTOR_SUCCESS_TRAJECTORIES_DIR_PATTERN}"
 				f"{self.uav_action_success_trajectories_sequence_length}_success_trajectories"
 			)
 			self.uav_model_evaluation_env.train_evaluation = False
 		else:
 			evaluation_simulations_buffers_path = (
-				f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][5]}/"
+				f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.test_env][self.uav_action_name][5]}/"
 				f"{gv.EVAL_SIMULATIONS_N_ACTOR_UPDATES_EPISODE_DIR_PATTERN}"
 				f"{self.total_NNs_updates_amount}_actor_updates"
 			)
@@ -237,6 +243,7 @@ episodes: int, test_env = "6DoF_model"):
 			action_t = self.actor(current_state, evaluation_mode = True)
 			self.action_evaluation_values["T_sum"] = self.get_action_Tsum_in_hover_representation(action_t)
 			if self.test_env == "6DoF_model":
+				action_t = tf.squeeze(action_t)
 				self.action_evaluation_values["tau_x"], self.action_evaluation_values["tau_y"], self.action_evaluation_values["tau_z"] = self.get_scaled_moments_tau(action_t)
 			next_state, reward_t, done = self.uav_model_evaluation_env.step(self.action_evaluation_values)
 			transition_vector = self.evaluation_episode_buffer.get_transition_vector(
@@ -309,7 +316,7 @@ episodes: int, test_env = "6DoF_model"):
 			)
 
 	def create_dirs_for_simulations(self, action_name: str):
-		simulations_data_dirs = gv.UAV_ACTIONS_SIMULATIONS_DIRS[action_name]
+		simulations_data_dirs = gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.test_env][action_name]
 		for sim_dir in simulations_data_dirs:
 			adf.create_dir_if_need(sim_dir)
 
@@ -344,7 +351,7 @@ episodes: int, test_env = "6DoF_model"):
 if __name__ == "__main__":
 	episode_steps = 2000
 	buffer_batch_size = 256
-	test_env = "1D_model"
+	test_env = "6DoF_model"
 	test_uav_action = "hover_stabilization"
 	fpv_hover_simulation = UAV_6DoF_Action_Simulation(
 		test_uav_action, buffer_batch_size,
