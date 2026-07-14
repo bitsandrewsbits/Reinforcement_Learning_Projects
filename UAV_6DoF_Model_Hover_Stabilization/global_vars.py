@@ -1,22 +1,44 @@
 UAV_ACTIONS_SIMULATIONS_DIRS = {
-	"ascent": [
-		"6DoF_ascent_simulations",
-		"6DoF_ascent_simulations/p_vectors_in_time",
-		"6DoF_ascent_simulations/replay_buffers",
-		"6DoF_ascent_simulations/trained_actor_model",
-		"6DoF_ascent_simulations/trained_critics_models",
-		"6DoF_ascent_simulations/eval_episodes_after_actor_updates",
-		"6DoF_ascent_simulations/eval_episodes_after_actor_success_trajectories"
-	],
-	"hover_stabilization": [
-		"6DoF_hover_stabilization_simulations",
-		"6DoF_hover_stabilization_simulations/p_vectors_in_time",
-		"6DoF_hover_stabilization_simulations/replay_buffers",
-		"6DoF_hover_stabilization_simulations/trained_actor_model",
-		"6DoF_hover_stabilization_simulations/trained_critics_models",
-		"6DoF_hover_stabilization_simulations/eval_episodes_after_actor_updates",
-		"6DoF_hover_stabilization_simulations/eval_episodes_after_actor_success_trajectories"
-	]
+	"6DoF_model": {
+		"ascent": [
+			"6DoF_ascent_simulations",
+			"6DoF_ascent_simulations/p_vectors_in_time",
+			"6DoF_ascent_simulations/replay_buffers",
+			"6DoF_ascent_simulations/trained_actor_model",
+			"6DoF_ascent_simulations/trained_critics_models",
+			"6DoF_ascent_simulations/eval_episodes_after_actor_updates",
+			"6DoF_ascent_simulations/eval_episodes_after_actor_success_trajectories"
+		],
+		"hover_stabilization": [
+			"6DoF_hover_stabilization_simulations",
+			"6DoF_hover_stabilization_simulations/p_vectors_in_time",
+			"6DoF_hover_stabilization_simulations/replay_buffers",
+			"6DoF_hover_stabilization_simulations/trained_actor_model",
+			"6DoF_hover_stabilization_simulations/trained_critics_models",
+			"6DoF_hover_stabilization_simulations/eval_episodes_after_actor_updates",
+			"6DoF_hover_stabilization_simulations/eval_episodes_after_actor_success_trajectories"
+		]
+	},
+	"1D_model": {
+		"ascent": [
+			"1D_model_ascent_simulations",
+			"1D_model_ascent_simulations/p_vectors_in_time",
+			"1D_model_ascent_simulations/replay_buffers",
+			"1D_model_ascent_simulations/trained_actor_model",
+			"1D_model_ascent_simulations/trained_critics_models",
+			"1D_model_ascent_simulations/eval_episodes_after_actor_updates",
+			"1D_model_ascent_simulations/eval_episodes_after_actor_success_trajectories"
+		],
+		"hover_stabilization": [
+			"1D_model_hover_stabilization_simulations",
+			"1D_model_hover_stabilization_simulations/p_vectors_in_time",
+			"1D_model_hover_stabilization_simulations/replay_buffers",
+			"1D_model_hover_stabilization_simulations/trained_actor_model",
+			"1D_model_hover_stabilization_simulations/trained_critics_models",
+			"1D_model_hover_stabilization_simulations/eval_episodes_after_actor_updates",
+			"1D_model_hover_stabilization_simulations/eval_episodes_after_actor_success_trajectories"
+		]
+	}
 }
 
 P_VECTORS_FILENAME_PATTERN = "p_vectors_for_Episode-"
@@ -24,7 +46,6 @@ REPLAY_BUFFERS_FILENAME_PATTERN = "Buffer_for_Episode-"
 
 PASSED_STEPS_BEFORE_LEARNING = 5 * 10 ** 3
 SUCCESS_HOVER_HEIGHTS_DATASET = "success_hover_heights_per_episode.jsonl"
-SUCCESS_HOVER_HEIGHTS_DATASET_PATH = f"{UAV_ACTIONS_SIMULATIONS_DIRS['hover_stabilization'][1]}/{SUCCESS_HOVER_HEIGHTS_DATASET}"
 
 SUCCESS_TRAINED_ACTOR_NN_WEIGHTS = "successfull_actor_NN.weights.h5"
 SUCCESS_TRAINED_CRITIC_NNS_WEIGHTS = "successfull_critic_NNs.weights.h5"
