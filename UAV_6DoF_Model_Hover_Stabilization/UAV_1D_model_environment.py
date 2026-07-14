@@ -250,7 +250,7 @@ class UAV_1D_Model_Environment:
 	def save_episode_p_vectors_to_JSONL(self, episode_number: int):
 		logs_dataset = pd.DataFrame(self.z_height_episode_logs)
 		logs_dataset.to_json(
-			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.uav_action_name][1]}/{self.p_vectors_filename_pattern}{episode_number}.jsonl",
+			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS["1D_model"][self.uav_action_name][1]}/{self.p_vectors_filename_pattern}{episode_number}.jsonl",
 			orient = 'records', lines = True
 		)
 
