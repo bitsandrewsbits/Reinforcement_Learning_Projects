@@ -209,7 +209,6 @@ class UAV_1D_Model_Environment:
 	
 	def get_reward_for_current_state_vector_hover_stabilization_stage(self):
 		z_deviation_from_target = self.current_state_vector["z"][0] - self.hover_stabilization_height_in_m
-		vz_deviation_from_target = self.get_vector_by_module("vz")
 
 		current_state_vector_reward = 0
 		if abs(z_deviation_from_target) < self.epsilon:
