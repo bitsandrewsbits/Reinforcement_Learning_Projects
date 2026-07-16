@@ -77,7 +77,7 @@ class Simulations_Logs_Analyzer:
 				if uav_action == "ascent":
 					self.show_plots_for_ascent_action()
 				elif uav_action == "hover_stabilization":
-					self.show_plots_for_hover_stabilization()
+					self.show_plots_for_hover_stabilization(received_args.uav_environment)
 				self.plot_episode_reward_per_episodes()
 				self.plot_steps_amount_per_episodes()
 				self.plot_Tsum_per_episodes()
@@ -87,13 +87,23 @@ class Simulations_Logs_Analyzer:
 			check_episode_number_period = int(received_args.one_action_logs_per_episodes)
 			for check_episode_number in range(1, len(self.episodes_numbers) + 1):
 				if check_episode_number % check_episode_number_period == 0:
-					self.plot_dependencies_with_t(
-						[
-							("state_t", 0, "z"), ("state_t", 1, "vz"),
-							("action_t", 0, "T_sum"), ("reward_t", -1, "reward_t")
-						],
-						check_episode_number
-					)
+					if self.selected_uav_env == "1D_model":
+						self.plot_dependencies_with_t(
+							[
+								("state_t", 0, "z"), ("state_t", 1, "vz"),
+								("action_t", 0, "T_sum"), ("reward_t", -1, "reward_t")
+							],
+							check_episode_number
+						)
+					elif self.selected_uav_env == "6DoF_model":
+						self.plot_dependencies_with_t(
+							[
+								("state_t", 0, "x"), ("state_t", 1, "y"), ("state_t", 2, "z"),
+								("state_t", 3, "vx"), ("state_t", 4, "vy"), ("state_t", 5, "vz"),
+								("action_t", 0, "T_sum"), ("reward_t", -1, "reward_t")
+							],
+							check_episode_number
+						)
 
 		if received_args.one_action_eval_episode_after_N_actor_updates:
 			actor_updates_number = received_args.one_action_eval_episode_after_N_actor_updates
@@ -135,8 +145,8 @@ class Simulations_Logs_Analyzer:
 		self.define_max_height_z_per_episodes()
 		self.plot_max_height_z_per_episodes()
 
-	def show_plots_for_hover_stabilization(self):
-		self.define_success_hover_heights_per_episodes()
+	def show_plots_for_hover_stabilization(self, env_name: str):
+		self.define_success_hover_heights_per_episodes(env_name)
 		self.plot_success_hover_heights_z_per_episodes()
 
 	def plot_evaluation_episodes_simulations(self, eval_episodes_simulations_path: str):
@@ -243,8 +253,10 @@ class Simulations_Logs_Analyzer:
 				episode_dataset_max_z
 			)
 
-	def define_success_hover_heights_per_episodes(self):
-		dataset_success_hover_z = adf.get_dataset_from_JSONL(gv.SUCCESS_HOVER_HEIGHTS_DATASET_PATH)
+	def define_success_hover_heights_per_episodes(self, env_name: str):
+		dataset_success_hover_z = adf.get_dataset_from_JSONL(
+			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[env_name]["hover_stabilization"][1]}/{gv.SUCCESS_HOVER_HEIGHTS_DATASET}"
+		)
 		self.success_hover_heights_amount_per_episodes = dataset_success_hover_z["success_hover_heights_amount"].values
 
 	def get_mean_z_value_from_dataset(self, p_vectors_dataset: pd.DataFrame):
