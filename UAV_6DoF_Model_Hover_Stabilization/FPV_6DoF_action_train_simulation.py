@@ -87,14 +87,14 @@ episodes: int, test_env = "6DoF_model"):
 				test_uav_action, 0.99,
 				{"alpha_xy": 0.5, "alpha_z": 15, "beta": 10, "gamma": 0.05, "delta": 10 ** (-5)},
 				{
-					"p": np.array([0, 0, 0]), "v": np.array([0, 0, 0]),
+					"p": np.array([0, 0, 0.481]), "v": np.array([0, 0, 0]),
 					"q": np.array([1, 0, 0, 0]), "omega": np.array([0, 0, 0])
 				},
 				{
 					"p": {"x": ["min_x", "max_x"], "y": ["min_y", "max_y"], "z": [0, "max_height"]},
 					"q": {"q1": [-0.7, 0.7], "q2": [-0.7, 0.7]}, "T_sum": [0, "max_T_sum"]
 				},
-				0.5, 0.1, 0.05, episode_steps
+				0.5, 8, 0.02, episode_steps
 			)
 		elif self.test_env == "1D_model":
 			return u1dme.UAV_1D_Model_Environment(
@@ -263,7 +263,7 @@ episodes: int, test_env = "6DoF_model"):
 		scaled_tau_x = self.uav_model_env.max_tau_x * action[1]
 		scaled_tau_y = self.uav_model_env.max_tau_y * action[2]
 		scaled_tau_z = self.uav_model_env.max_tau_z * action[3]
-		return scaled_tau_x, scaled_tau_y, scaled_tau_z
+		return scaled_tau_x.numpy(), scaled_tau_y.numpy(), scaled_tau_z.numpy()
 
 	def update_critic_Q1_Q2_trainable_weights(self, states_actions_batch, next_states_actions_batch,
 	rewards_batch, dones_batch, log_actions_batch_probabilities):
@@ -355,6 +355,6 @@ if __name__ == "__main__":
 	test_uav_action = "hover_stabilization"
 	fpv_hover_simulation = UAV_6DoF_Action_Simulation(
 		test_uav_action, buffer_batch_size,
-		episode_steps, 400, test_env
+		episode_steps, 1500, test_env
 	)
 	fpv_hover_simulation.main()
