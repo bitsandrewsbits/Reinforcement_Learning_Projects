@@ -27,7 +27,6 @@ class UAV_6DoF_Model_Environment:
 		self.UAV_mass_in_kg = self.battery_mass_in_kg + 4 * self.UAV_motor_mass_in_kg
 		self.UAV_wing_shoulder_in_m = 0.2
 		self.F_g = np.array([0, 0, -self.UAV_mass_in_kg * 9.8])
-		self.k_v = np.array([0.1, 0.1, 0.2])
 		self.inertia_moment_J = self.get_moment_inertia_J()
 		self.max_tau_x = self.Jx * 5
 		self.max_tau_y = self.Jy * 5
@@ -225,8 +224,7 @@ class UAV_6DoF_Model_Environment:
 
 	def define_next_vector_v(self):
 		F_world = self.get_dot_product_of_quaternion_rotation_matrix_and_F_b_t()
-		drag = -self.k_v * self.current_state_vector["v"]
-		acceleration = (1 / self.UAV_mass_in_kg) * (F_world + self.F_g + drag)
+		acceleration = (1 / self.UAV_mass_in_kg) * (F_world + self.F_g)
 		self.next_state_vector["v"] = self.current_state_vector["v"] + acceleration * self.delta_t_in_sec
 
 	def get_dot_product_of_quaternion_rotation_matrix_and_F_b_t(self):
@@ -311,25 +309,27 @@ class UAV_6DoF_Model_Environment:
 		x_deviation_from_target = self.current_state_vector["p"][0] - self.target_p_components_for_hover_stabilization_in_m[0]
 		y_deviation_from_target = self.current_state_vector["p"][1] - self.target_p_components_for_hover_stabilization_in_m[1]
 		z_deviation_from_target = self.current_state_vector["p"][2] - self.hover_stabilization_height_in_m
-		v_deviation_from_target = self.get_vector_by_module("v")
 		omega_deviation_from_target = self.get_vector_by_module("omega")
 
 		current_state_vector_reward = 0
 		if abs(z_deviation_from_target) < self.epsilon:
 			self.hover_steps_amount += 1
-			current_state_vector_reward += self.hover_extra_reward * (0.1 - 45 * abs(self.current_state_vector["v"][0] + self.next_state_vector["v"][0]))
-			current_state_vector_reward += self.hover_extra_reward * (0.1 - 45 * abs(self.current_state_vector["v"][1] + self.next_state_vector["v"][1]))
-			current_state_vector_reward += self.hover_extra_reward * (0.1 - 45 * abs(self.current_state_vector["v"][2] + self.next_state_vector["v"][2]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - 50 * abs(self.current_state_vector["v"][0] + self.next_state_vector["v"][0]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - 50 * abs(self.current_state_vector["v"][1] + self.next_state_vector["v"][1]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - 50 * abs(self.current_state_vector["v"][2] + self.next_state_vector["v"][2]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - 40 * abs(self.current_state_vector["omega"][0] + self.next_state_vector["omega"][0]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - 40 * abs(self.current_state_vector["omega"][1] + self.next_state_vector["omega"][1]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - 40 * abs(self.current_state_vector["omega"][2] + self.next_state_vector["omega"][2]))
 		else:
 			self.hover_steps_amount = 0
 
-		current_state_vector_reward -= 90 * abs(x_deviation_from_target)
-		current_state_vector_reward -= 90 * abs(y_deviation_from_target)
-		current_state_vector_reward -= 90 * abs(z_deviation_from_target)
+		current_state_vector_reward -= 99 * abs(x_deviation_from_target)
+		current_state_vector_reward -= 99 * abs(y_deviation_from_target)
+		current_state_vector_reward -= 99 * abs(z_deviation_from_target)
 		current_state_vector_reward -= 110 * abs(self.current_state_vector["v"][0])
 		current_state_vector_reward -= 110 * abs(self.current_state_vector["v"][1])
 		current_state_vector_reward -= 110 * abs(self.current_state_vector["v"][2])
-		current_state_vector_reward -= 100 * omega_deviation_from_target
+		current_state_vector_reward -= 110 * omega_deviation_from_target
 
 		if self.hover_steps_amount == self.target_hover_steps_amount:
 			current_state_vector_reward += 500
