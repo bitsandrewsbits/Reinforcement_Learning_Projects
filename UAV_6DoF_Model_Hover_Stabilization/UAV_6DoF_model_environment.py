@@ -309,17 +309,18 @@ class UAV_6DoF_Model_Environment:
 		x_deviation_from_target = self.current_state_vector["p"][0] - self.target_p_components_for_hover_stabilization_in_m[0]
 		y_deviation_from_target = self.current_state_vector["p"][1] - self.target_p_components_for_hover_stabilization_in_m[1]
 		z_deviation_from_target = self.current_state_vector["p"][2] - self.hover_stabilization_height_in_m
-		omega_deviation_from_target = self.get_vector_by_module("omega")
+		# omega_deviation_from_target = self.get_vector_by_module("omega")
+		quaternion_deviation_from_target = self.get_vector_deviation_from_target("q", [0, 1, 2, 3], [1, 0, 0, 0])
 
 		current_state_vector_reward = 0
 		if abs(z_deviation_from_target) < self.epsilon:
 			self.hover_steps_amount += 1
-			current_state_vector_reward += self.hover_extra_reward * (0.1 - 50 * abs(self.current_state_vector["v"][0] + self.next_state_vector["v"][0]))
-			current_state_vector_reward += self.hover_extra_reward * (0.1 - 50 * abs(self.current_state_vector["v"][1] + self.next_state_vector["v"][1]))
-			current_state_vector_reward += self.hover_extra_reward * (0.1 - 50 * abs(self.current_state_vector["v"][2] + self.next_state_vector["v"][2]))
-			current_state_vector_reward += self.hover_extra_reward * (0.1 - 40 * abs(self.current_state_vector["omega"][0] + self.next_state_vector["omega"][0]))
-			current_state_vector_reward += self.hover_extra_reward * (0.1 - 40 * abs(self.current_state_vector["omega"][1] + self.next_state_vector["omega"][1]))
-			current_state_vector_reward += self.hover_extra_reward * (0.1 - 40 * abs(self.current_state_vector["omega"][2] + self.next_state_vector["omega"][2]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - 45 * abs(self.current_state_vector["v"][0] + self.next_state_vector["v"][0]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - 45 * abs(self.current_state_vector["v"][1] + self.next_state_vector["v"][1]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - 45 * abs(self.current_state_vector["v"][2] + self.next_state_vector["v"][2]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - 50 * abs(self.current_state_vector["omega"][0] + self.next_state_vector["omega"][0]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - 50 * abs(self.current_state_vector["omega"][1] + self.next_state_vector["omega"][1]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - 50 * abs(self.current_state_vector["omega"][2] + self.next_state_vector["omega"][2]))
 		else:
 			self.hover_steps_amount = 0
 
@@ -329,7 +330,10 @@ class UAV_6DoF_Model_Environment:
 		current_state_vector_reward -= 110 * abs(self.current_state_vector["v"][0])
 		current_state_vector_reward -= 110 * abs(self.current_state_vector["v"][1])
 		current_state_vector_reward -= 110 * abs(self.current_state_vector["v"][2])
-		current_state_vector_reward -= 110 * omega_deviation_from_target
+		current_state_vector_reward -= 110 * abs(self.current_state_vector["omega"][0])
+		current_state_vector_reward -= 110 * abs(self.current_state_vector["omega"][1])
+		current_state_vector_reward -= 110 * abs(self.current_state_vector["omega"][2])
+		current_state_vector_reward -= 110 * quaternion_deviation_from_target
 
 		if self.hover_steps_amount == self.target_hover_steps_amount:
 			current_state_vector_reward += 500
@@ -340,11 +344,11 @@ class UAV_6DoF_Model_Environment:
 
 		return current_state_vector_reward
 
-	def get_vector_deviation_by_module(self, vector: str, components_indexes: list[int]):
+	def get_vector_deviation_from_target(self, vector: str, components_indexes: list[int], target_vector_values: list):
 		vector_deviation_from_target = 0
-		for i in components_indexes:
+		for (i, target_vector_value) in zip(components_indexes, target_vector_values):
 			vector_deviation_from_target += (
-				self.current_state_vector[vector][i] - self.target_p_components_for_hover_stabilization_in_m[i]
+				self.current_state_vector[vector][i] - target_vector_value
 			) ** 2
 		return np.sqrt(vector_deviation_from_target)
 
