@@ -49,6 +49,12 @@ class UAV_6DoF_Model_Environment:
 			"T_sum": self.UAV_mass_in_kg * 9.8,
 			"tau_x": 0.0, "tau_y": 0.0, "tau_z": 0.0
 		}
+		self.reward_penalties_by_vector_components = {
+			"x": 0.0, "y": 0.0, "z": 0.0,
+			"vx": 0.0, "vy": 0.0, "vz": 0.0,
+			"omega_x": 0.0, "omega_y": 0.0, "omega_z": 0.0,
+			"q": 0.0
+		}
 		if self.uav_action_name == "ascent":
 			self.action_space_values = {"T_sum": 0.0, "tau_x": 0.0, "tau_y": 0.0, "tau_z": 0.0}
 		elif self.uav_action_name == "hover_stabilization":
@@ -306,34 +312,21 @@ class UAV_6DoF_Model_Environment:
 		return current_state_vector_reward
 	
 	def get_reward_for_current_state_vector_hover_stabilization_stage(self):
-		x_deviation_from_target = self.current_state_vector["p"][0] - self.target_p_components_for_hover_stabilization_in_m[0]
-		y_deviation_from_target = self.current_state_vector["p"][1] - self.target_p_components_for_hover_stabilization_in_m[1]
+		self.update_reward_penalties_by_vector_components()
 		z_deviation_from_target = self.current_state_vector["p"][2] - self.hover_stabilization_height_in_m
-		# omega_deviation_from_target = self.get_vector_by_module("omega")
-		quaternion_deviation_from_target = self.get_vector_deviation_from_target("q", [0, 1, 2, 3], [1, 0, 0, 0])
-
 		current_state_vector_reward = 0
 		if abs(z_deviation_from_target) < self.epsilon:
 			self.hover_steps_amount += 1
-			current_state_vector_reward += self.hover_extra_reward * (0.1 - 45 * abs(self.current_state_vector["v"][0] + self.next_state_vector["v"][0]))
-			current_state_vector_reward += self.hover_extra_reward * (0.1 - 45 * abs(self.current_state_vector["v"][1] + self.next_state_vector["v"][1]))
-			current_state_vector_reward += self.hover_extra_reward * (0.1 - 45 * abs(self.current_state_vector["v"][2] + self.next_state_vector["v"][2]))
-			current_state_vector_reward += self.hover_extra_reward * (0.1 - 50 * abs(self.current_state_vector["omega"][0] + self.next_state_vector["omega"][0]))
-			current_state_vector_reward += self.hover_extra_reward * (0.1 - 50 * abs(self.current_state_vector["omega"][1] + self.next_state_vector["omega"][1]))
-			current_state_vector_reward += self.hover_extra_reward * (0.1 - 50 * abs(self.current_state_vector["omega"][2] + self.next_state_vector["omega"][2]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - abs(self.current_state_vector["v"][0] + self.next_state_vector["v"][0]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - abs(self.current_state_vector["v"][1] + self.next_state_vector["v"][1]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - abs(self.current_state_vector["v"][2] + self.next_state_vector["v"][2]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - abs(self.current_state_vector["omega"][0] + self.next_state_vector["omega"][0]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - abs(self.current_state_vector["omega"][1] + self.next_state_vector["omega"][1]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - abs(self.current_state_vector["omega"][2] + self.next_state_vector["omega"][2]))
 		else:
 			self.hover_steps_amount = 0
-
-		current_state_vector_reward -= 99 * abs(x_deviation_from_target)
-		current_state_vector_reward -= 99 * abs(y_deviation_from_target)
-		current_state_vector_reward -= 99 * abs(z_deviation_from_target)
-		current_state_vector_reward -= 110 * abs(self.current_state_vector["v"][0])
-		current_state_vector_reward -= 110 * abs(self.current_state_vector["v"][1])
-		current_state_vector_reward -= 110 * abs(self.current_state_vector["v"][2])
-		current_state_vector_reward -= 110 * abs(self.current_state_vector["omega"][0])
-		current_state_vector_reward -= 110 * abs(self.current_state_vector["omega"][1])
-		current_state_vector_reward -= 110 * abs(self.current_state_vector["omega"][2])
-		current_state_vector_reward -= 110 * quaternion_deviation_from_target
+		sum_penalty = self.get_sum_penalty()
+		current_state_vector_reward -= sum_penalty
 
 		if self.hover_steps_amount == self.target_hover_steps_amount:
 			current_state_vector_reward += 500
@@ -343,6 +336,34 @@ class UAV_6DoF_Model_Environment:
 			self.success_stage_trajectory = False
 
 		return current_state_vector_reward
+
+	def update_reward_penalties_by_vector_components(self):
+		self.reward_penalties_by_vector_components["x"] = abs(
+			self.current_state_vector["p"][0] - self.target_p_components_for_hover_stabilization_in_m[0]
+		)
+		self.reward_penalties_by_vector_components["y"] = abs(
+			self.current_state_vector["p"][1] - self.target_p_components_for_hover_stabilization_in_m[1]
+		)
+		self.reward_penalties_by_vector_components["z"] = abs(
+			self.current_state_vector["p"][2] - self.hover_stabilization_height_in_m
+		)
+		self.reward_penalties_by_vector_components["vx"] = abs(self.current_state_vector["v"][0])
+		self.reward_penalties_by_vector_components["vy"] = abs(self.current_state_vector["v"][1])
+		self.reward_penalties_by_vector_components["vz"] = abs(self.current_state_vector["v"][2])
+		self.reward_penalties_by_vector_components["omega_x"] = abs(self.current_state_vector["omega"][0])
+		self.reward_penalties_by_vector_components["omega_y"] = abs(self.current_state_vector["omega"][1])
+		self.reward_penalties_by_vector_components["omega_z"] = abs(self.current_state_vector["omega"][2])
+		self.reward_penalties_by_vector_components["q"] = self.get_vector_deviation_from_target("q", [0, 1, 2, 3], [1, 0, 0, 0])
+
+	def get_sum_penalty(self):
+		max_reward_penalty = max(self.reward_penalties_by_vector_components.values())
+		sum_penalty = 0
+		for (vector_component, value) in self.reward_penalties_by_vector_components.items():
+			if max_reward_penalty < 1:
+				sum_penalty += value / (max_reward_penalty + 10 ** (-6))
+			else:
+				sum_penalty += value
+		return sum_penalty
 
 	def get_vector_deviation_from_target(self, vector: str, components_indexes: list[int], target_vector_values: list):
 		vector_deviation_from_target = 0
@@ -357,14 +378,6 @@ class UAV_6DoF_Model_Environment:
 		for (i, current_vector_component_value) in enumerate(self.current_state_vector[vector]):
 			vector_by_module += self.current_state_vector[vector][i] ** 2
 		return np.sqrt(vector_by_module)
-
-	def get_action_deviation_by_module(self):
-		action_deviation_by_module = 0
-		for action_component in self.action_space_values:
-			action_deviation_by_module += (
-				self.action_space_values[action_component] - self.hover_action_components[action_component]
-			) ** 2
-		return np.sqrt(action_deviation_by_module)
 
 	def log_p_vector_components_at_current_step(self):
 		self.p_vector_component_episode_logs["time_in_sec"].append(self.current_step * self.delta_t_in_sec)
