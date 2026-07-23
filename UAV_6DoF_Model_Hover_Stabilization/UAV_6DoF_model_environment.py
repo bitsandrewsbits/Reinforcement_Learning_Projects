@@ -1,4 +1,5 @@
 # drone 6DoF model environment for UAV hover stabilization
+import tensorflow as tf
 import numpy as np
 import pandas as pd
 import random
@@ -23,14 +24,22 @@ class UAV_6DoF_Model_Environment:
 		self.current_state_vector_size = sum([val.shape[0] for val in self.current_state_vector.values()])
 		self.next_state_vector = {"p": [], "v": [], "q": [], "omega": []}
 		self.battery_mass_in_kg = 0.9
-		self.UAV_motor_mass_in_kg = 0.06
+		self.battery_voltage_V = 22.2
+		self.UAV_motor_mass_in_kg = 0.0476
 		self.UAV_mass_in_kg = self.battery_mass_in_kg + 4 * self.UAV_motor_mass_in_kg
-		self.UAV_wing_shoulder_in_m = 0.2
+		
+		self.UAV_motor_KV = 1300
+		self.UAV_max_RPM = self.UAV_motor_KV * self.battery_voltage_V
+		self.UAV_RPM_hover = 0.18 * self.UAV_max_RPM
+		self.thrust_in_H_for_each_motor = self.UAV_mass_in_kg * 9.8 / 4
+		self.omega_hover_in_rad = self.UAV_RPM_hover * (2 * np.pi / 60)
+		self.kt = self.thrust_in_H_for_each_motor / self.omega_hover_in_rad ** 2
+
+		self.UAV_wing_shoulder_in_m = 0.1778
 		self.F_g = np.array([0, 0, -self.UAV_mass_in_kg * 9.8])
 		self.inertia_moment_J = self.get_moment_inertia_J()
-		self.max_tau_x = self.Jx * 5
-		self.max_tau_y = self.Jy * 5
-		self.max_tau_z = self.Jz * 5
+
+		# TODO: change restrictions for action space
 		self.state_space_restrictions = state_space_restrictions
 
 		self.action_space_restrictions = {
@@ -56,13 +65,21 @@ class UAV_6DoF_Model_Environment:
 			"q": 0.0
 		}
 		if self.uav_action_name == "ascent":
-			self.action_space_values = {"T_sum": 0.0, "tau_x": 0.0, "tau_y": 0.0, "tau_z": 0.0}
+			self.action_space_values = tf.constant(
+				[0, 0, 0, 0], dtype = tf.float32
+			)
 		elif self.uav_action_name == "hover_stabilization":
-			self.action_space_values = {
-				"T_sum": self.hover_action_components["T_sum"],
-				"tau_x": 0.0, "tau_y": 0.0, "tau_z": 0.0
-			}
-		self.thrust_force_F_b_t = np.array([0, 0, self.action_space_values["T_sum"]])
+			self.action_space_values = tf.constant([
+				self.omega_hover_in_rad,
+				self.omega_hover_in_rad,
+				self.omega_hover_in_rad,
+				self.omega_hover_in_rad
+			])
+		self.motors_T = {"T1": 0.0, "T2": 0.0, "T3": 0.0, "T4": 0.0}
+		self.T_sum = 0.0
+		self.moments_tau = {"tau_x": 0.0, "tau_y": 0.0, "tau_z": 0.0}
+
+		self.thrust_force_F_b_t = np.array([0, 0, self.T_sum])
 		self.update_state_space_restrictions()
 		self.current_state_vector_reward = 0
 		self.hover_time_in_sec = hover_time_in_sec
@@ -87,13 +104,17 @@ class UAV_6DoF_Model_Environment:
 				return 0
 			self.current_step += 1
 			action = self.get_test_action()
-			self.next_state_vector, self.current_state_vector_reward = self.step(action)
+			self.next_state_vector, self.current_state_vector_reward, done = self.step(action)
 			
 		print(f"[INFO] Simulation finished by time = {self.current_step // 100} seconds.")
 		self.show_logs()
 
-	def step(self, action_t: dict):
-		next_state_vector = self.get_next_state_vector(action_t)
+	def step(self, action_t: tf.Tensor):
+		self.update_action_values(action_t)
+		self.update_motors_Ti()
+		self.update_T_sum()
+		self.update_moments_tau()
+		next_state_vector = self.get_next_state_vector()
 		if self.uav_action_name == "ascent":
 			current_state_vector_reward = self.get_reward_for_current_state_vector_ascent_stage()
 		elif self.uav_action_name == "hover_stabilization":
@@ -112,13 +133,20 @@ class UAV_6DoF_Model_Environment:
 		self.current_state_vector = self.init_state_vector
 		self.next_state_vector = {"p": [], "v": [], "q": [], "omega": []}
 		if self.uav_action_name == "ascent":
-			self.action_space_values = {"T_sum": 0.0, "tau_x": 0.0, "tau_y": 0.0, "tau_z": 0.0}
+			self.action_space_values = tf.constant(
+				[0, 0, 0, 0], dtype = tf.float32
+			)
 		elif self.uav_action_name == "hover_stabilization":
-			self.action_space_values = {
-				"T_sum": self.hover_action_components["T_sum"],
-				"tau_x": 0.0, "tau_y": 0.0, "tau_z": 0.0
-			}
-		self.thrust_force_F_b_t = np.array([0, 0, self.action_space_values["T_sum"]])
+			self.action_space_values = tf.constant([
+				self.omega_hover_in_rad,
+				self.omega_hover_in_rad,
+				self.omega_hover_in_rad,
+				self.omega_hover_in_rad
+			])
+		self.T_sum = 0.0
+		self.thrust_force_F_b_t = np.array([0, 0, self.T_sum])
+		self.motors_T = {"T1": 0.0, "T2": 0.0, "T3": 0.0, "T4": 0.0}
+		self.moments_tau = {"tau_x": 0.0, "tau_y": 0.0, "tau_z": 0.0}
 		self.current_state_vector_reward = 0
 		self.episode_termination = False
 		self.success_stage_trajectory = False
@@ -127,8 +155,7 @@ class UAV_6DoF_Model_Environment:
 		self.target_done = 0
 		self.p_vector_component_episode_logs = {"time_in_sec": [], "x": [], "y": [], "z": []}
 
-	def get_next_state_vector(self, action_t: dict):
-		self.update_action_space_values(action_t)
+	def get_next_state_vector(self):
 		self.restrict_action_t_values()
 		self.update_thrust_force_F_b_t()
 		self.define_next_vector_p()
@@ -138,7 +165,6 @@ class UAV_6DoF_Model_Environment:
 
 		return self.next_state_vector
 
-	# TODO: think, how to create this method for 3 axises(x, y, z)
 	def transition_vector_is_success(self, transition: pd.DataFrame):
 		for transition_vector_component_p_index in [0, 1, 2]:
 			if self.transition_vector_components_pair_is_success(
@@ -148,7 +174,6 @@ class UAV_6DoF_Model_Environment:
 				return False
 		return True
 
-	# TODO: create method for one axis, for one (x, vx)-style pair.
 	def transition_vector_components_pair_is_success(self, transition: pd.DataFrame, axis_i: int):
 		position_p_i = transition["state_t"].values[0][axis_i]
 		speed_v_i = transition["state_t"].values[0][axis_i + 3]
@@ -175,9 +200,10 @@ class UAV_6DoF_Model_Environment:
 	def reset_next_state_vector(self):
 		self.next_state_vector = {"p": [], "v": [], "q": [], "omega": []}
 
-	def update_action_space_values(self, action_t: dict):
+	def update_action_space_values(self, action_t: tf.Tensor):
 		self.action_space_values = action_t
 
+	# TODO: update - the same
 	def restrict_action_t_values(self):
 		for (action, action_value) in self.action_space_values.items():
 			min_action_value = self.action_space_restrictions[action][0]
@@ -214,6 +240,7 @@ class UAV_6DoF_Model_Environment:
 				return True
 		return False
 
+	# TODO: change with respect to new action space updates
 	def update_state_space_restrictions(self):
 		for (p_component, coeff) in self.x_y_coeffs_for_min_max.items():
 			self.state_space_restrictions["p"][p_component] = [
@@ -223,7 +250,23 @@ class UAV_6DoF_Model_Environment:
 		self.state_space_restrictions["T_sum"] = [0.1 * self.hover_action_components["T_sum"], 4 * self.hover_action_components["T_sum"]]
 
 	def update_thrust_force_F_b_t(self):
-		self.thrust_force_F_b_t = np.array([0, 0, self.action_space_values["T_sum"]])
+		self.thrust_force_F_b_t = np.array([0, 0, self.T_sum])
+
+	def update_action_values(self, action_t: tf.Tensor):
+		print(action_t)
+		self.action_space_values = self.omega_hover_in_rad * (1 + 0.2 * action_t)
+
+	def update_motors_Ti(self):
+		for (action_value, motor_Ti) in zip(self.action_space_values, self.motors_T.keys()):
+			self.motors_T[motor_Ti] = self.kt * action_value ** 2
+
+	def update_T_sum(self):
+		self.T_sum = sum(self.motors_T.values())
+
+	def update_moments_tau(self):
+		self.moments_tau["tau_x"] = self.UAV_wing_shoulder_in_m * (self.motors_T["T2"] - self.motors_T["T4"])
+		self.moments_tau["tau_y"] = self.UAV_wing_shoulder_in_m * (self.motors_T["T3"] - self.motors_T["T1"])
+		self.moments_tau["tay_z"] = self.motors_T["T1"] - self.motors_T["T2"] + self.motors_T["T3"] - self.motors_T["T4"]
 
 	def define_next_vector_p(self):
 		self.next_state_vector["p"] = self.current_state_vector["p"] + self.current_state_vector["v"] * self.delta_t_in_sec
@@ -274,7 +317,7 @@ class UAV_6DoF_Model_Environment:
 
 	def define_next_vector_omega(self):
 		moments_tau = np.array([
-			self.action_space_values["tau_x"], self.action_space_values["tau_y"], self.action_space_values["tau_z"]
+			self.moments_tau["tau_x"], self.moments_tau["tau_y"], self.moments_tau["tau_z"]
 		])
 		inversed_J = np.linalg.inv(self.inertia_moment_J)
 		dot_product_of_J_and_omega = self.inertia_moment_J.dot(self.current_state_vector["omega"])
@@ -397,15 +440,17 @@ class UAV_6DoF_Model_Environment:
 		print(logs_dataset)
 
 	def get_test_action(self):
-		return {
-			"T_sum": self.UAV_mass_in_kg * 9.8 + random.uniform(-1, 1), 
-			"tau_x": random.randint(-1, 1) / 20, "tau_y": random.randint(-1, 1) / 20,
-			"tau_z": random.randint(-1, 1) / 50
-		}
+		return tf.constant([
+				random.randint(0, 100) / 100,
+				random.randint(0, 100) / 100,
+				random.randint(0, 100) / 100,
+				random.randint(0, 100) / 100,
+		])
 
 if __name__ == "__main__":
 	UAV_model_environment = UAV_6DoF_Model_Environment(
-		0.99, {"alpha_xy": 0.3, "alpha_z": 5, "beta": 0.5, "gamma": 1.2, "delta": 2},
+		'hover_stabilization', 0.99,
+		{"alpha_xy": 0.3, "alpha_z": 5, "beta": 0.5, "gamma": 1.2, "delta": 2},
 		{
 			"p": np.array([0, 0, 0]), "v": np.array([0, 0, 0]),
 			"q": np.array([1, 0, 0, 0]), "omega": np.array([0, 0, 0])
@@ -414,6 +459,6 @@ if __name__ == "__main__":
 			"p": {"x": ["min_x", "max_x"], "y": ["min_y", "max_y"], "z": [0, "max_height"]}, 
 			"q": {"q1": [-0.7, 0.7], "q2": [-0.7, 0.7]}, "T_sum": [0, "max_T_sum"]
 		},
-		0.5, 2, 1000
+		0.5, 2, 0.2, 1
 	)
 	UAV_model_environment.start_test_simulation()
