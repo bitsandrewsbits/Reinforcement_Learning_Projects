@@ -56,10 +56,10 @@ class ReplayBuffer:
 		if self.buffer.shape[0] + transition_vector.shape[0] > self.buffer_max_transition_vectors:
 			self.buffer = self.buffer[self.buffer.shape[0] - self.buffer_max_transition_vectors:]
 
-	def get_transition_vector(self, state_t: tf.Tensor, action_t: dict, reward_t: float, done: int, state_tp1: dict):
+	def get_transition_vector(self, state_t: tf.Tensor, action_t: tf.Tensor, reward_t: float, done: int, state_tp1: dict):
 		transition_vector = {"state_t": [], "action_t": [], "reward_t": [], "target_done": [], "state_tp1": []}
 		transition_vector["state_t"].append(tf.keras.ops.convert_to_numpy(tf.squeeze(state_t)))
-		transition_vector["action_t"].append(list(action_t.values()))
+		transition_vector["action_t"].append(tf.keras.ops.convert_to_numpy(action_t))
 		transition_vector["reward_t"].append(reward_t)
 		transition_vector["target_done"].append(done)
 		transition_vector["state_tp1"].append(adf.get_values_as_array(state_tp1))
