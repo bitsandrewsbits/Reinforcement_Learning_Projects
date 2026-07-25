@@ -39,14 +39,16 @@ class UAV_6DoF_Model_Environment:
 		self.F_g = np.array([0, 0, -self.UAV_mass_in_kg * 9.8])
 		self.inertia_moment_J = self.get_moment_inertia_J()
 
-		# TODO: change restrictions for action space
-		self.state_space_restrictions = state_space_restrictions
-
-		self.action_space_restrictions = {
-			"T_sum": [0, 4 * self.UAV_mass_in_kg * 9.8],
-			"tau_x": [-1, 1], "tau_y": [-1, 1], "tau_z": [-1, 1]
-		}
 		self.x_y_coeffs_for_min_max = {"x": 2, "y": 2}
+
+		self.state_space_restrictions = state_space_restrictions
+		self.action_space_restrictions = {
+			"w1": [0, 2 * self.omega_hover_in_rad],
+			"w2": [0, 2 * self.omega_hover_in_rad],
+			"w3": [0, 2 * self.omega_hover_in_rad],
+			"w4": [0, 2 * self.omega_hover_in_rad]
+		}
+
 		self.z_coeff_for_max_height = 1.5
 		self.hover_stabilization_height_in_m = hover_stabilization_height_in_m
 		self.target_p_components_for_hover_stabilization_in_m = [
@@ -74,7 +76,7 @@ class UAV_6DoF_Model_Environment:
 				self.omega_hover_in_rad,
 				self.omega_hover_in_rad,
 				self.omega_hover_in_rad
-			])
+			], dtype = tf.float32)
 		self.motors_T = {"T1": 0.0, "T2": 0.0, "T3": 0.0, "T4": 0.0}
 		self.T_sum = 0.0
 		self.moments_tau = {"tau_x": 0.0, "tau_y": 0.0, "tau_z": 0.0}
@@ -104,6 +106,9 @@ class UAV_6DoF_Model_Environment:
 				return 0
 			self.current_step += 1
 			action = self.get_test_action()
+			self.update_action_values(action)
+			self.restrict_action_t_values()
+			print(self.action_space_values)
 			self.next_state_vector, self.current_state_vector_reward, done = self.step(action)
 			
 		print(f"[INFO] Simulation finished by time = {self.current_step // 100} seconds.")
@@ -142,7 +147,7 @@ class UAV_6DoF_Model_Environment:
 				self.omega_hover_in_rad,
 				self.omega_hover_in_rad,
 				self.omega_hover_in_rad
-			])
+			], dtype = tf.float32)
 		self.T_sum = 0.0
 		self.thrust_force_F_b_t = np.array([0, 0, self.T_sum])
 		self.motors_T = {"T1": 0.0, "T2": 0.0, "T3": 0.0, "T4": 0.0}
@@ -203,15 +208,14 @@ class UAV_6DoF_Model_Environment:
 	def update_action_space_values(self, action_t: tf.Tensor):
 		self.action_space_values = action_t
 
-	# TODO: update - the same
 	def restrict_action_t_values(self):
-		for (action, action_value) in self.action_space_values.items():
+		for (i, action) in enumerate(self.action_space_restrictions.keys()):
 			min_action_value = self.action_space_restrictions[action][0]
 			max_action_value = self.action_space_restrictions[action][1]
-			if action_value > max_action_value:
-				self.action_space_values[action] = max_action_value
-			elif action_value < min_action_value:
-				self.action_space_values[action] = min_action_value
+			if self.action_space_values[i] > max_action_value:
+				self.action_space_values[i] = max_action_value
+			elif self.action_space_values[i] < min_action_value:
+				self.action_space_values[i] = min_action_value
 
 	def check_current_state_vector_components_to_episode_termination(self):
 		if self.is_episode_termination_by_p_vector_component():
@@ -247,14 +251,12 @@ class UAV_6DoF_Model_Environment:
 				-coeff * self.hover_stabilization_height_in_m, coeff * self.hover_stabilization_height_in_m
 			]
 		self.state_space_restrictions["p"]["z"] = [-0.2, self.z_coeff_for_max_height * self.hover_stabilization_height_in_m]
-		self.state_space_restrictions["T_sum"] = [0.1 * self.hover_action_components["T_sum"], 4 * self.hover_action_components["T_sum"]]
 
 	def update_thrust_force_F_b_t(self):
 		self.thrust_force_F_b_t = np.array([0, 0, self.T_sum])
 
 	def update_action_values(self, action_t: tf.Tensor):
-		print(action_t)
-		self.action_space_values = self.omega_hover_in_rad * (1 + 0.2 * action_t)
+		self.action_space_values = self.omega_hover_in_rad * (1 + 0.3 * action_t)
 
 	def update_motors_Ti(self):
 		for (action_value, motor_Ti) in zip(self.action_space_values, self.motors_T.keys()):
@@ -441,10 +443,10 @@ class UAV_6DoF_Model_Environment:
 
 	def get_test_action(self):
 		return tf.constant([
-				random.randint(0, 100) / 100,
-				random.randint(0, 100) / 100,
-				random.randint(0, 100) / 100,
-				random.randint(0, 100) / 100,
+				random.randint(-100, 100) / 100,
+				random.randint(-100, 100) / 100,
+				random.randint(-100, 100) / 100,
+				random.randint(-100, 100) / 100,
 		])
 
 if __name__ == "__main__":
@@ -457,8 +459,8 @@ if __name__ == "__main__":
 		},
 		{
 			"p": {"x": ["min_x", "max_x"], "y": ["min_y", "max_y"], "z": [0, "max_height"]}, 
-			"q": {"q1": [-0.7, 0.7], "q2": [-0.7, 0.7]}, "T_sum": [0, "max_T_sum"]
+			"q": {"q1": [-0.7, 0.7], "q2": [-0.7, 0.7]}
 		},
-		0.5, 2, 0.2, 1
+		0.5, 2, 0.2, 2
 	)
 	UAV_model_environment.start_test_simulation()
