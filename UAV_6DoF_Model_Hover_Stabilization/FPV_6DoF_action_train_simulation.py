@@ -25,14 +25,14 @@ episodes: int, test_env = "6DoF_model"):
 		self.steps_in_episode = steps_in_episode
 		self.episodes = episodes
 		self.buffer_batch_size = buffer_batch_size
-		self.success_transitions_batch_size_percents = 0.5
+		self.success_transitions_batch_size_percents = 0.25
 		self.success_transitions_batch_size = int(
 			self.success_transitions_batch_size_percents * self.buffer_batch_size
 		)
 		self.train_batch_size = self.buffer_batch_size - self.success_transitions_batch_size
 		self.passed_steps_amount_before_learning = gv.PASSED_STEPS_BEFORE_LEARNING
 		self.train_buffer_size = 10 ** 5
-		self.success_transitions_buffer_size = 3 * 10 ** 3
+		self.success_transitions_buffer_size = 4 * 10 ** 3
 		self.train_replay_buffer = rb.ReplayBuffer(
 			self.train_buffer_size, self.buffer_batch_size
 		)
@@ -92,7 +92,7 @@ episodes: int, test_env = "6DoF_model"):
 				},
 				{
 					"p": {"x": ["min_x", "max_x"], "y": ["min_y", "max_y"], "z": [0, "max_height"]},
-					"q": {"q1": [-0.7, 0.7], "q2": [-0.7, 0.7]}, "T_sum": [0, "max_T_sum"]
+					"q": {"q1": [-0.7, 0.7], "q2": [-0.7, 0.7]},
 				},
 				0.5, 8, 0.02, episode_steps
 			)
@@ -182,13 +182,13 @@ episodes: int, test_env = "6DoF_model"):
 			current_state = self.uav_model_env.current_state_vector
 			current_state = tf.expand_dims(adf.get_values_as_array(current_state), axis = 0)
 			action_t, _ = self.actor(current_state)
-			self.action_values["T_sum"] = self.get_action_Tsum_in_hover_representation(action_t)
 			if self.test_env == "6DoF_model":
 				action_t = tf.squeeze(action_t)
-				self.action_values["tau_x"], self.action_values["tau_y"], self.action_values["tau_z"] = self.get_scaled_moments_tau(action_t)
-			next_state, reward_t, done = self.uav_model_env.step(self.action_values)
+			next_state, reward_t, done = self.uav_model_env.step(action_t)
+			scaled_action_t = self.uav_model_env.action_space_values
+			
 			transition_vector = self.train_replay_buffer.get_transition_vector(
-				current_state, self.action_values, reward_t, done, next_state
+				current_state, scaled_action_t, reward_t, done, next_state
 			)
 			
 			self.total_passed_steps += 1
@@ -241,29 +241,17 @@ episodes: int, test_env = "6DoF_model"):
 			current_state = self.uav_model_evaluation_env.current_state_vector
 			current_state = tf.expand_dims(adf.get_values_as_array(current_state), axis = 0)
 			action_t = self.actor(current_state, evaluation_mode = True)
-			self.action_evaluation_values["T_sum"] = self.get_action_Tsum_in_hover_representation(action_t)
 			if self.test_env == "6DoF_model":
 				action_t = tf.squeeze(action_t)
-				self.action_evaluation_values["tau_x"], self.action_evaluation_values["tau_y"], self.action_evaluation_values["tau_z"] = self.get_scaled_moments_tau(action_t)
-			next_state, reward_t, done = self.uav_model_evaluation_env.step(self.action_evaluation_values)
+			next_state, reward_t, done = self.uav_model_evaluation_env.step(action_t)
+			scaled_action_t = self.uav_model_evaluation_env.action_space_values
+			
 			transition_vector = self.evaluation_episode_buffer.get_transition_vector(
 				current_state, self.action_evaluation_values, reward_t, done, next_state
 			)
 			self.evaluation_episode_buffer.add_transition_vector_to_buffer(transition_vector)
 		evaluation_simulation_buffer_path = f"{evaluation_simulations_buffers_path}/simulation-{eval_simulation_number}.jsonl"
 		adf.save_dataset_to_JSONL(self.evaluation_episode_buffer.buffer, evaluation_simulation_buffer_path)
-
-	def get_action_Tsum_in_hover_representation(self, action_Tsum: tf.Tensor):
-		action_Tsum_float = tf.keras.ops.convert_to_numpy(action_Tsum)[0][0]
-		updated_Tsum = self.uav_model_env.hover_action_components["T_sum"] * (1 + 0.02 * action_Tsum_float)
-
-		return updated_Tsum
-
-	def get_scaled_moments_tau(self, action: tf.Tensor):
-		scaled_tau_x = self.uav_model_env.max_tau_x * action[1]
-		scaled_tau_y = self.uav_model_env.max_tau_y * action[2]
-		scaled_tau_z = self.uav_model_env.max_tau_z * action[3]
-		return scaled_tau_x.numpy(), scaled_tau_y.numpy(), scaled_tau_z.numpy()
 
 	def update_critic_Q1_Q2_trainable_weights(self, states_actions_batch, next_states_actions_batch,
 	rewards_batch, dones_batch, log_actions_batch_probabilities):
@@ -301,7 +289,7 @@ episodes: int, test_env = "6DoF_model"):
 		self.actor(zeros_states_actions)
 
 	def initialize_critic_NNs_target_critic_NNs_weights(self):
-		action_space_size = len(self.uav_model_env.action_space_values.values())
+		action_space_size = len(self.uav_model_env.action_space_values)
 		states_actions_batch_shape = (1, self.uav_model_env.current_state_vector_size + action_space_size)
 		zeros_states_actions = np.zeros(states_actions_batch_shape)
 		self.critic(zeros_states_actions)
@@ -355,6 +343,6 @@ if __name__ == "__main__":
 	test_uav_action = "hover_stabilization"
 	fpv_hover_simulation = UAV_6DoF_Action_Simulation(
 		test_uav_action, buffer_batch_size,
-		episode_steps, 1500, test_env
+		episode_steps, 1000, test_env
 	)
 	fpv_hover_simulation.main()
