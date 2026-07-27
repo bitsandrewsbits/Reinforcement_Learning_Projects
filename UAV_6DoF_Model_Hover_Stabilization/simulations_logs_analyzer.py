@@ -1,5 +1,6 @@
 # Simulations logs analyzer: 
 import os
+import numpy as np
 import pandas as pd
 import matplotlib
 matplotlib.use("qt5agg")
@@ -26,10 +27,11 @@ class Simulations_Logs_Analyzer:
 		self.max_height_z_per_episodes = []
 		self.steps_per_episodes = []
 		self.Tsum_per_episodes = []
-		self.battery_mass_in_kg = 0.9
-		self.UAV_motor_mass_in_kg = 0.06
-		self.UAV_mass_in_kg = self.battery_mass_in_kg + 4 * self.UAV_motor_mass_in_kg
-		self.T_hover = self.UAV_mass_in_kg * 9.8
+		self.battery_voltage_V = 22.2
+		self.UAV_motor_KV = 1300
+		self.UAV_max_RPM = self.UAV_motor_KV * self.battery_voltage_V
+		self.UAV_RPM_hover = 0.18 * self.UAV_max_RPM
+		self.T_hover = self.UAV_RPM_hover * (2 * np.pi / 60)
 
 	def main(self):
 		plots_modes_parser = argparse.ArgumentParser()
