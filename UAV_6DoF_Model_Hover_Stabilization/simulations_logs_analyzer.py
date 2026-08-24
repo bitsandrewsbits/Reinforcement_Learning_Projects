@@ -72,8 +72,8 @@ class Simulations_Logs_Analyzer:
 			self.update_all_variables_for_uav_action(self.selected_uav_action_name)
 
 		elif received_args.all_uav_actions_statistics:
-			fig, ax = plt.subplots(4, 1)
 			for uav_action in self.possible_uav_actions:
+				fig = plt.figure(figsize = (16.5, 8.5))
 				self.update_all_variables_for_uav_action(uav_action)
 				self.define_episodes_rewards_Tsum_per_episodes()
 				if uav_action == "ascent":
@@ -83,6 +83,7 @@ class Simulations_Logs_Analyzer:
 				self.plot_episode_reward_per_episodes()
 				self.plot_steps_amount_per_episodes()
 				self.plot_Tsum_per_episodes()
+				self.save_plot("all_episodes_results_for_", uav_action)
 				plt.show()
 
 		if received_args.one_action_logs_per_episodes:
@@ -317,13 +318,11 @@ class Simulations_Logs_Analyzer:
 
 		return vector_component_values
 
-	def get_vector_component_name(self, vector_name: str, vector_component_index: int):
-		if vector_name == "state_t":
-			return self.index_to_state_vector_component[vector_component_index]
-		elif vector_name == "action_t":
-			return self.index_to_action_t_component[vector_component_index]
-		else:
-			return "reward_t"
+	def save_plot(self, filename: str, uav_action_name: str):
+		plt.savefig(
+			f"{gv.UAV_ACTIONS_SIMULATIONS_DIRS[self.selected_uav_env][uav_action_name][0]}/"
+			f"{filename}{uav_action_name}.png"
+		)
 
 if __name__ == "__main__":
 	simulations_logs_analyzer = Simulations_Logs_Analyzer()
