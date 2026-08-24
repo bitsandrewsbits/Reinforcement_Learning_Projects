@@ -3,6 +3,7 @@ import tensorflow as tf
 import numpy as np
 import pandas as pd
 import random
+import copy
 import global_vars as gv
 
 class UAV_6DoF_Model_Environment:
@@ -49,7 +50,7 @@ class UAV_6DoF_Model_Environment:
 			"w4": [0, 2 * self.omega_hover_in_rad]
 		}
 
-		self.z_coeff_for_max_height = 1.5
+		# self.z_coeff_for_max_height = 1.5
 		self.hover_stabilization_height_in_m = hover_stabilization_height_in_m
 		self.target_p_components_for_hover_stabilization_in_m = [
 			self.init_state_vector["p"][0],
@@ -135,7 +136,7 @@ class UAV_6DoF_Model_Environment:
 		return next_state_vector, current_state_vector_reward, self.target_done
 
 	def reset_environment(self):
-		self.current_state_vector = self.init_state_vector
+		self.current_state_vector = copy.deepcopy(self.init_state_vector)
 		self.next_state_vector = {"p": [], "v": [], "q": [], "omega": []}
 		if self.uav_action_name == "ascent":
 			self.action_space_values = tf.constant(
@@ -180,18 +181,21 @@ class UAV_6DoF_Model_Environment:
 		return True
 
 	def transition_vector_components_pair_is_success(self, transition: pd.DataFrame, axis_i: int):
-		position_p_i = transition["state_t"].values[0][axis_i]
-		speed_v_i = transition["state_t"].values[0][axis_i + 3]
-		if axis_i == 2: 
-			if position_p_i > self.hover_stabilization_height_in_m - self.epsilon:
-				if position_p_i < self.hover_stabilization_height_in_m + self.epsilon / 1.2:
-					if abs(round(speed_v_i, 4)) < 0.005:
-						return True
-		else:
-			if position_p_i > -self.epsilon / 1.2:
-				if position_p_i < self.epsilon / 1.2:
-					if abs(round(speed_v_i, 4)) < 0.005:
-						return True
+		# TODO: change condition for successful transition vector - only reward value
+		# position_p_i = transition["state_t"].values[0][axis_i]
+		# speed_v_i = transition["state_t"].values[0][axis_i + 3]
+		# if axis_i == 2: 
+		# 	if position_p_i > self.hover_stabilization_height_in_m - self.epsilon:
+		# 		if position_p_i < self.hover_stabilization_height_in_m + self.epsilon / 1.2:
+		# 			if abs(round(speed_v_i, 4)) < 0.005:
+		# 				return True
+		# else:
+		# 	if position_p_i > -self.epsilon / 1.2:
+		# 		if position_p_i < self.epsilon / 1.2:
+		# 			if abs(round(speed_v_i, 4)) < 0.005:
+		# 				return True
+		if transition["reward_t"].values > -50:
+			return True
 		return False
 
 	def make_next_state_vector_as_current(self):
@@ -244,19 +248,18 @@ class UAV_6DoF_Model_Environment:
 				return True
 		return False
 
-	# TODO: change with respect to new action space updates
 	def update_state_space_restrictions(self):
 		for (p_component, coeff) in self.x_y_coeffs_for_min_max.items():
 			self.state_space_restrictions["p"][p_component] = [
 				-coeff * self.hover_stabilization_height_in_m, coeff * self.hover_stabilization_height_in_m
 			]
-		self.state_space_restrictions["p"]["z"] = [-0.2, self.z_coeff_for_max_height * self.hover_stabilization_height_in_m]
+		self.state_space_restrictions["p"]["z"] = [0, 2 * self.hover_stabilization_height_in_m]
 
 	def update_thrust_force_F_b_t(self):
 		self.thrust_force_F_b_t = np.array([0, 0, self.T_sum])
 
 	def update_action_values(self, action_t: tf.Tensor):
-		self.action_space_values = self.omega_hover_in_rad * (1 + 0.3 * action_t)
+		self.action_space_values = self.omega_hover_in_rad * (1 + 0.6 * action_t)
 
 	def update_motors_Ti(self):
 		for (action_value, motor_Ti) in zip(self.action_space_values, self.motors_T.keys()):
@@ -365,9 +368,9 @@ class UAV_6DoF_Model_Environment:
 			current_state_vector_reward += self.hover_extra_reward * (0.1 - abs(self.current_state_vector["v"][0] + self.next_state_vector["v"][0]))
 			current_state_vector_reward += self.hover_extra_reward * (0.1 - abs(self.current_state_vector["v"][1] + self.next_state_vector["v"][1]))
 			current_state_vector_reward += self.hover_extra_reward * (0.1 - abs(self.current_state_vector["v"][2] + self.next_state_vector["v"][2]))
-			current_state_vector_reward += self.hover_extra_reward * (0.1 - abs(self.current_state_vector["omega"][0] + self.next_state_vector["omega"][0]))
-			current_state_vector_reward += self.hover_extra_reward * (0.1 - abs(self.current_state_vector["omega"][1] + self.next_state_vector["omega"][1]))
-			current_state_vector_reward += self.hover_extra_reward * (0.1 - abs(self.current_state_vector["omega"][2] + self.next_state_vector["omega"][2]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - abs(self.current_state_vector["omega"][0] + self.current_state_vector["omega"][0]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - abs(self.current_state_vector["omega"][1] + self.current_state_vector["omega"][1]))
+			current_state_vector_reward += self.hover_extra_reward * (0.1 - abs(self.current_state_vector["omega"][2] + self.current_state_vector["omega"][2]))
 		else:
 			self.hover_steps_amount = 0
 		sum_penalty = self.get_sum_penalty()
@@ -383,31 +386,28 @@ class UAV_6DoF_Model_Environment:
 		return current_state_vector_reward
 
 	def update_reward_penalties_by_vector_components(self):
-		self.reward_penalties_by_vector_components["x"] = abs(
+		self.reward_penalties_by_vector_components["x"] = (8 * abs(
 			self.current_state_vector["p"][0] - self.target_p_components_for_hover_stabilization_in_m[0]
-		)
-		self.reward_penalties_by_vector_components["y"] = abs(
+		)) ** 2
+		self.reward_penalties_by_vector_components["y"] = (8 * abs(
 			self.current_state_vector["p"][1] - self.target_p_components_for_hover_stabilization_in_m[1]
-		)
-		self.reward_penalties_by_vector_components["z"] = abs(
+		)) ** 2
+		self.reward_penalties_by_vector_components["z"] = (9 * abs(
 			self.current_state_vector["p"][2] - self.hover_stabilization_height_in_m
-		)
-		self.reward_penalties_by_vector_components["vx"] = abs(self.current_state_vector["v"][0])
-		self.reward_penalties_by_vector_components["vy"] = abs(self.current_state_vector["v"][1])
-		self.reward_penalties_by_vector_components["vz"] = abs(self.current_state_vector["v"][2])
-		self.reward_penalties_by_vector_components["omega_x"] = abs(self.current_state_vector["omega"][0])
-		self.reward_penalties_by_vector_components["omega_y"] = abs(self.current_state_vector["omega"][1])
-		self.reward_penalties_by_vector_components["omega_z"] = abs(self.current_state_vector["omega"][2])
-		self.reward_penalties_by_vector_components["q"] = self.get_vector_deviation_from_target("q", [0, 1, 2, 3], [1, 0, 0, 0])
+		)) ** 2
+		self.reward_penalties_by_vector_components["vx"] = 10 * abs(self.current_state_vector["v"][0])
+		self.reward_penalties_by_vector_components["vy"] = 10 * abs(self.current_state_vector["v"][1])
+		self.reward_penalties_by_vector_components["vz"] = 10 * abs(self.current_state_vector["v"][2])
+		self.reward_penalties_by_vector_components["omega_x"] = 11 * abs(self.current_state_vector["omega"][0])
+		self.reward_penalties_by_vector_components["omega_y"] = 11 * abs(self.current_state_vector["omega"][1])
+		self.reward_penalties_by_vector_components["omega_z"] = 10 * abs(self.current_state_vector["omega"][2])
+		self.reward_penalties_by_vector_components["q"] = 10 * self.get_vector_deviation_from_target("q", [0, 1, 2, 3], [1, 0, 0, 0])
 
 	def get_sum_penalty(self):
 		max_reward_penalty = max(self.reward_penalties_by_vector_components.values())
 		sum_penalty = 0
 		for (vector_component, value) in self.reward_penalties_by_vector_components.items():
-			if max_reward_penalty < 1:
-				sum_penalty += value / (max_reward_penalty + 10 ** (-6))
-			else:
-				sum_penalty += value
+			sum_penalty += value
 		return sum_penalty
 
 	def get_vector_deviation_from_target(self, vector: str, components_indexes: list[int], target_vector_values: list):
