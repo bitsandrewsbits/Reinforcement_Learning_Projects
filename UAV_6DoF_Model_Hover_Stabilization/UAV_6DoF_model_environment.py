@@ -31,10 +31,16 @@ class UAV_6DoF_Model_Environment:
 		
 		self.UAV_motor_KV = 1300
 		self.UAV_max_RPM = self.UAV_motor_KV * self.battery_voltage_V
-		self.UAV_RPM_hover = 0.18 * self.UAV_max_RPM
+		self.UAV_RPM_hover = 0.23 * self.UAV_max_RPM
+		print("Hover RPM =", self.UAV_RPM_hover)
 		self.thrust_in_H_for_each_motor = self.UAV_mass_in_kg * 9.8 / 4
+		print("Motor Trust(T) =", self.thrust_in_H_for_each_motor)
 		self.omega_hover_in_rad = self.UAV_RPM_hover * (2 * np.pi / 60)
 		self.kt = self.thrust_in_H_for_each_motor / self.omega_hover_in_rad ** 2
+		print("k_t =", self.kt)
+		self.C_Q_in_Hm_per_RPM2 = 2.44 * 10 ** (-10)
+		self.km = self.C_Q_in_Hm_per_RPM2 * (60 / (2 * np.pi)) ** 2
+		print("k_m =", self.km)
 
 		self.UAV_wing_shoulder_in_m = 0.1778
 		self.F_g = np.array([0, 0, -self.UAV_mass_in_kg * 9.8])
@@ -117,7 +123,7 @@ class UAV_6DoF_Model_Environment:
 
 	def step(self, action_t: tf.Tensor):
 		self.update_action_values(action_t)
-		self.update_motors_Ti()
+		self.update_motors_Ti_for_tau_x_y()
 		self.update_T_sum()
 		self.update_moments_tau()
 		next_state_vector = self.get_next_state_vector()
@@ -273,9 +279,13 @@ class UAV_6DoF_Model_Environment:
 	def update_action_values(self, action_t: tf.Tensor):
 		self.action_space_values = self.omega_hover_in_rad * (1 + 0.6 * action_t)
 
-	def update_motors_Ti(self):
+	def update_motors_Ti_for_tau_x_y(self):
 		for (action_value, motor_Ti) in zip(self.action_space_values, self.motors_T.keys()):
 			self.motors_T[motor_Ti] = self.kt * action_value ** 2
+
+	def update_motors_Ti_for_tau_z(self):
+		for (action_value, motor_Ti) in zip(self.action_space_values, self.motors_T.keys()):
+			self.motors_T[motor_Ti] = self.km * action_value ** 2
 
 	def update_T_sum(self):
 		self.T_sum = sum(self.motors_T.values())
@@ -283,6 +293,7 @@ class UAV_6DoF_Model_Environment:
 	def update_moments_tau(self):
 		self.moments_tau["tau_x"] = self.UAV_wing_shoulder_in_m * (self.motors_T["T2"] - self.motors_T["T4"])
 		self.moments_tau["tau_y"] = self.UAV_wing_shoulder_in_m * (self.motors_T["T3"] - self.motors_T["T1"])
+		self.update_motors_Ti_for_tau_z()
 		self.moments_tau["tau_z"] = (self.motors_T["T1"] - self.motors_T["T2"] + self.motors_T["T3"] - self.motors_T["T4"])
 
 	def define_next_vector_p(self):
