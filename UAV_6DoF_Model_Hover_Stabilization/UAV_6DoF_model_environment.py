@@ -41,6 +41,14 @@ class UAV_6DoF_Model_Environment:
 		self.C_Q_in_Hm_per_RPM2 = 2.44 * 10 ** (-10)
 		self.km = self.C_Q_in_Hm_per_RPM2 * (60 / (2 * np.pi)) ** 2
 		print("k_m =", self.km)
+		self.drag_coefficients = np.array([
+			0.1, 0.1, 0.1
+		])
+		self.previous_wind_velocity = np.zeros(3)
+		self.wind_velocity = self.previous_wind_velocity.copy()
+		self.wind_update_interval_in_steps = 300
+		self.transition_steps_to_update_wind_velocity = 30
+		self.current_transition_steps_to_update_wind_velocity = 0
 
 		self.UAV_wing_shoulder_in_m = 0.1778
 		self.F_g = np.array([0, 0, -self.UAV_mass_in_kg * 9.8])
@@ -56,7 +64,6 @@ class UAV_6DoF_Model_Environment:
 			"w4": [0, 2 * self.omega_hover_in_rad]
 		}
 
-		# self.z_coeff_for_max_height = 1.5
 		self.hover_stabilization_height_in_m = hover_stabilization_height_in_m
 		self.target_p_components_for_hover_stabilization_in_m = [
 			self.init_state_vector["p"][0],
@@ -301,7 +308,10 @@ class UAV_6DoF_Model_Environment:
 
 	def define_next_vector_v(self):
 		F_world = self.get_dot_product_of_quaternion_rotation_matrix_and_F_b_t()
-		acceleration = (1 / self.UAV_mass_in_kg) * (F_world + self.F_g)
+		F_drag = self.get_drag_force()
+		self.define_current_step_wind_velocity()
+		# TODO: create method for getting F_wind_gust as external disturbances
+		acceleration = (1 / self.UAV_mass_in_kg) * (F_world + self.F_g + F_drag)
 		self.next_state_vector["v"] = self.current_state_vector["v"] + acceleration * self.delta_t_in_sec
 
 	def get_dot_product_of_quaternion_rotation_matrix_and_F_b_t(self):
@@ -323,6 +333,35 @@ class UAV_6DoF_Model_Environment:
 			]
 		])
 		return R_q_t.dot(self.thrust_force_F_b_t)
+
+	def get_drag_force(self):
+		return -self.drag_coefficients * self.current_state_vector["v"]
+
+	def define_current_step_wind_velocity(self):
+		if self.current_step % self.wind_update_interval_in_steps == 0:
+			self.generate_wind_velocity()
+		self.update_wind_velocity_to_new_via_transition()
+
+	def generate_wind_velocity(self):
+		self.previous_wind_velocity = self.wind_velocity.copy()
+		self.wind_velocity = np.array([
+			np.random.uniform(-2, 2),
+			np.random.uniform(-2, 2),
+			0.0
+		])
+		self.current_steps_to_update_wind_velocity = 0
+
+	def update_wind_velocity_to_new_via_transition(self):
+		alpha = self.get_wind_velocity_transition_coeff_alpha()
+		if alpha <= 1:
+			self.wind_velocity = (1 - alpha) * self.previous_wind_velocity + alpha * self.wind_velocity
+		else:
+			self.current_transitions_steps_to_update_wind_velocity = 0
+
+	def get_wind_velocity_transition_coeff_alpha(self):
+		alpha = round(self.current_transition_steps_to_update_wind_velocity / self.transition_steps_to_update_wind_velocity, 2)
+		self.current_transition_steps_to_update_wind_velocity += 1
+		return alpha
 
 	def define_next_vector_q(self):
 		multiplication_of_Omega_omega_t_and_q = self.get_dot_product_of_Omega_matrix_and_quaternion()
