@@ -49,6 +49,9 @@ class UAV_6DoF_Model_Environment:
 		self.wind_update_interval_in_steps = 300
 		self.transition_steps_to_update_wind_velocity = 30
 		self.current_transition_steps_to_update_wind_velocity = 0
+		self.air_density_ro = 1.225
+		self.C_D = 1.2
+		self.projected_area_A = np.array([0.018, 0.018, 0])
 
 		self.UAV_wing_shoulder_in_m = 0.1778
 		self.F_g = np.array([0, 0, -self.UAV_mass_in_kg * 9.8])
@@ -311,7 +314,8 @@ class UAV_6DoF_Model_Environment:
 		F_drag = self.get_drag_force()
 		self.define_current_step_wind_velocity()
 		# TODO: create method for getting F_wind_gust as external disturbances
-		acceleration = (1 / self.UAV_mass_in_kg) * (F_world + self.F_g + F_drag)
+		F_wind = self.get_wind_gust_force()
+		acceleration = (1 / self.UAV_mass_in_kg) * (F_world + self.F_g + F_drag + F_wind)
 		self.next_state_vector["v"] = self.current_state_vector["v"] + acceleration * self.delta_t_in_sec
 
 	def get_dot_product_of_quaternion_rotation_matrix_and_F_b_t(self):
@@ -336,6 +340,12 @@ class UAV_6DoF_Model_Environment:
 
 	def get_drag_force(self):
 		return -self.drag_coefficients * self.current_state_vector["v"]
+
+	def get_wind_gust_force(self):
+		v_relative = self.wind_velocity - self.current_state_vector["v"]
+		wind_gust_force = 0.5 * self.air_density_ro * (self.C_D * self.projected_area_A) * abs(v_relative) * v_relative
+		# print("Wind_gust_force =", wind_gust_force)
+		return wind_gust_force
 
 	def define_current_step_wind_velocity(self):
 		if self.current_step % self.wind_update_interval_in_steps == 0:
