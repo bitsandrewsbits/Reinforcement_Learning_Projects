@@ -107,6 +107,7 @@ class UAV_6DoF_Model_Environment:
 		self.target_done = 0
 		self.episode_termination = False
 		self.success_stage_trajectory = False
+		self.truncated_by_episode_steps = False
 		self.current_step = 0
 		self.simulation_steps = simulation_steps
 		self.p_vector_component_episode_logs = {"time_in_sec": [], "x": [], "y": [], "z": []}
@@ -132,6 +133,7 @@ class UAV_6DoF_Model_Environment:
 		self.show_logs()
 
 	def step(self, action_t: tf.Tensor):
+		self.check_if_episode_is_truncated()
 		self.update_action_values(action_t)
 		self.update_motors_Ti_for_tau_x_y()
 		self.update_T_sum()
@@ -172,6 +174,7 @@ class UAV_6DoF_Model_Environment:
 		self.current_state_vector_reward = 0
 		self.episode_termination = False
 		self.success_stage_trajectory = False
+		self.truncated_by_episode_steps = False
 		self.current_step = 0
 		self.hover_steps_amount = 0
 		self.target_done = 0
@@ -186,6 +189,10 @@ class UAV_6DoF_Model_Environment:
 		self.define_next_vector_omega()
 
 		return self.next_state_vector
+
+	def check_if_episode_is_truncated(self):
+		if self.current_step > self.simulation_steps:
+			self.truncated_by_episode_steps = True
 
 	def transition_vector_is_success(self, transition: pd.DataFrame):
 		for transition_vector_component_p_index in [0, 1, 2]:
