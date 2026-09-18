@@ -112,6 +112,7 @@ class UAV_6DoF_Model_Environment:
 		self.simulation_steps = simulation_steps
 		self.p_vector_component_episode_logs = {"time_in_sec": [], "x": [], "y": [], "z": []}
 		self.p_vectors_filename_pattern = gv.P_VECTORS_FILENAME_PATTERN
+		self.RNG = np.random
 
 	def start_test_simulation(self):
 		self.update_state_space_restrictions()
@@ -122,11 +123,9 @@ class UAV_6DoF_Model_Environment:
 				print("[INFO] Simulation(episode) was terminated.")
 				self.show_logs()
 				return 0
-			self.current_step += 1
 			action = self.get_test_action()
 			self.update_action_values(action)
 			self.restrict_action_t_values()
-			print(self.action_space_values)
 			self.next_state_vector, self.current_state_vector_reward, done = self.step(action)
 			
 		print(f"[INFO] Simulation finished by time = {self.current_step // 100} seconds.")
@@ -153,7 +152,7 @@ class UAV_6DoF_Model_Environment:
 
 		return next_state_vector, current_state_vector_reward, self.target_done
 
-	def reset_environment(self):
+	def reset_environment(self, rng = np.random):
 		self.current_state_vector = copy.deepcopy(self.init_state_vector)
 		self.next_state_vector = {"p": [], "v": [], "q": [], "omega": []}
 		if self.uav_action_name == "ascent":
@@ -179,6 +178,8 @@ class UAV_6DoF_Model_Environment:
 		self.hover_steps_amount = 0
 		self.target_done = 0
 		self.p_vector_component_episode_logs = {"time_in_sec": [], "x": [], "y": [], "z": []}
+		self.RNG = rng
+		return self.init_state_vector, {}
 
 	def get_next_state_vector(self):
 		self.restrict_action_t_values()
@@ -320,9 +321,8 @@ class UAV_6DoF_Model_Environment:
 		F_world = self.get_dot_product_of_quaternion_rotation_matrix_and_F_b_t()
 		F_drag = self.get_drag_force()
 		self.define_current_step_wind_velocity()
-		# TODO: create method for getting F_wind_gust as external disturbances
 		F_wind = self.get_wind_gust_force()
-		acceleration = (1 / self.UAV_mass_in_kg) * (F_world + self.F_g + F_drag + F_wind)
+		acceleration = (F_world + self.F_g + F_drag + F_wind) / self.UAV_mass_in_kg
 		self.next_state_vector["v"] = self.current_state_vector["v"] + acceleration * self.delta_t_in_sec
 
 	def get_dot_product_of_quaternion_rotation_matrix_and_F_b_t(self):
@@ -351,19 +351,19 @@ class UAV_6DoF_Model_Environment:
 	def get_wind_gust_force(self):
 		v_relative = self.wind_velocity - self.current_state_vector["v"]
 		wind_gust_force = 0.5 * self.air_density_ro * (self.C_D * self.projected_area_A) * abs(v_relative) * v_relative
-		# print("Wind_gust_force =", wind_gust_force)
 		return wind_gust_force
 
 	def define_current_step_wind_velocity(self):
 		if self.current_step % self.wind_update_interval_in_steps == 0:
 			self.generate_wind_velocity()
-		self.update_wind_velocity_to_new_via_transition()
+		else:
+			self.update_wind_velocity_to_new_via_transition()
 
 	def generate_wind_velocity(self):
 		self.previous_wind_velocity = self.wind_velocity.copy()
 		self.wind_velocity = np.array([
-			np.random.uniform(-2, 2),
-			np.random.uniform(-2, 2),
+			self.RNG.uniform(-2, 2),
+			self.RNG.uniform(-2, 2),
 			0.0
 		])
 		self.current_steps_to_update_wind_velocity = 0
@@ -376,7 +376,7 @@ class UAV_6DoF_Model_Environment:
 			self.current_transitions_steps_to_update_wind_velocity = 0
 
 	def get_wind_velocity_transition_coeff_alpha(self):
-		alpha = round(self.current_transition_steps_to_update_wind_velocity / self.transition_steps_to_update_wind_velocity, 2)
+		alpha = round(self.current_transition_steps_to_update_wind_velocity / self.transition_steps_to_update_wind_velocity, 5)
 		self.current_transition_steps_to_update_wind_velocity += 1
 		return alpha
 
@@ -540,6 +540,6 @@ if __name__ == "__main__":
 			"p": {"x": ["min_x", "max_x"], "y": ["min_y", "max_y"], "z": [0, "max_height"]}, 
 			"q": {"q1": [-0.7, 0.7], "q2": [-0.7, 0.7]}
 		},
-		0.5, 2, 0.2, 2
+		0.5, 2, 0.2, 10
 	)
 	UAV_model_environment.start_test_simulation()
