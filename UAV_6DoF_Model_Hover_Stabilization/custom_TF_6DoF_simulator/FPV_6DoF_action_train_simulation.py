@@ -25,14 +25,14 @@ episodes: int, test_env = "6DoF_model"):
 		self.steps_in_episode = steps_in_episode
 		self.episodes = episodes
 		self.buffer_batch_size = buffer_batch_size
-		self.success_transitions_batch_size_percents = 0.25
+		self.success_transitions_batch_size_percents = 0.5
 		self.success_transitions_batch_size = int(
 			self.success_transitions_batch_size_percents * self.buffer_batch_size
 		)
 		self.train_batch_size = self.buffer_batch_size - self.success_transitions_batch_size
 		self.passed_steps_amount_before_learning = gv.PASSED_STEPS_BEFORE_LEARNING
 		self.train_buffer_size = 10 ** 5
-		self.success_transitions_buffer_size = 4 * 10 ** 3
+		self.success_transitions_buffer_size = 6 * 10 ** 3
 		self.train_replay_buffer = rb.ReplayBuffer(
 			self.train_buffer_size, self.buffer_batch_size
 		)
@@ -87,7 +87,7 @@ episodes: int, test_env = "6DoF_model"):
 				test_uav_action, 0.99,
 				{"alpha_xy": 0.5, "alpha_z": 15, "beta": 10, "gamma": 0.05, "delta": 10 ** (-5)},
 				{
-					"p": np.array([0, 0, 0.481]), "v": np.array([0, 0, 0]),
+					"p": np.array([0, 0, 0.480]), "v": np.array([0, 0, 0]),
 					"q": np.array([1, 0, 0, 0]), "omega": np.array([0, 0, 0])
 				},
 				{
@@ -158,7 +158,7 @@ episodes: int, test_env = "6DoF_model"):
 	def start_simulation(self, episode_number: int):
 		print(f"Running Episode #{episode_number}...")
 		for step_i in range(self.steps_in_episode):
-			if self.uav_model_env.episode_termination:
+			if self.uav_model_env.episode_termination or self.uav_model_env.truncated_by_episode_steps:
 				break
 			if self.total_passed_steps > self.passed_steps_amount_before_learning:
 				self.actor_training_started = True
@@ -343,6 +343,6 @@ if __name__ == "__main__":
 	test_uav_action = "hover_stabilization"
 	fpv_hover_simulation = UAV_6DoF_Action_Simulation(
 		test_uav_action, buffer_batch_size,
-		episode_steps, 1000, test_env
+		episode_steps, 4000, test_env
 	)
 	fpv_hover_simulation.main()
