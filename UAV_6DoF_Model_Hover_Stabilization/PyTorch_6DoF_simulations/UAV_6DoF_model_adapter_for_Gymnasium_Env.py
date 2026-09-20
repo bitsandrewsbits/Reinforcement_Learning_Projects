@@ -14,7 +14,7 @@ class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 
 		self.uav_6dof_env = uav_env.UAV_6DoF_Model_Environment(
 			'hover_stabilization', 0.99,
-			{"alpha": 2, "beta": 0.4, "gamma": 1.2, "delta": 1.2},
+			{"alpha": 2, "beta": 0.4, "gamma": 1.2, "delta": 0.05},
 			{
 				"p": np.array([0, 0, 0.5]), "v": np.array([0, 0, 0]),
 				"q": np.array([1, 0, 0, 0]), "omega": np.array([0, 0, 0])
@@ -24,9 +24,11 @@ class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 				"q": {"q1": [-0.7, 0.7], "q2": [-0.7, 0.7]}
 			},
 			hover_stabilization_height_in_m = 0.5,
-			hover_time_in_sec = 1,
+			hover_time_in_sec = 10,
 			max_diviation_from_hover_height = 0.2,
-			simulation_steps = 1000
+			simulation_steps = 1000,
+			external_drag_disturbance = False,
+			external_wind_disturbance = False
 		)
 		self.observation_space = Box(
 			low = -10000,
