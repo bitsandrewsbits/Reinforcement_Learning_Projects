@@ -21,25 +21,27 @@ class UAV_6DoF_Model_Environment:
 		self.init_state_vector = init_state_vector
 		self.current_state_vector = init_state_vector
 		self.current_state_vector_size = sum([val.shape[0] for val in self.current_state_vector.values()])
+		self.current_state_euler_angeles = np.array([0.0, 0.0, 0.0])
 		self.next_state_vector = {"p": [], "v": [], "q": [], "omega": []}
+		self.next_state_euler_angeles = np.array([0.0, 0.0, 0.0])
 		self.battery_mass_in_kg = 0.9
 		self.battery_voltage_V = 22.2
 		self.UAV_motor_mass_in_kg = 0.0476
+		self.UAV_mass_in_kg_baseline = self.battery_mass_in_kg + 4 * self.UAV_motor_mass_in_kg
 		self.UAV_mass_in_kg = self.battery_mass_in_kg + 4 * self.UAV_motor_mass_in_kg
 		
 		self.UAV_motor_KV = 1300
 		self.UAV_max_RPM = self.UAV_motor_KV * self.battery_voltage_V
 		self.UAV_RPM_hover = 0.23 * self.UAV_max_RPM
-		print("Hover RPM =", self.UAV_RPM_hover)
 		self.thrust_in_H_for_each_motor = self.UAV_mass_in_kg * 9.8 / 4
-		print("Motor Trust(T) =", self.thrust_in_H_for_each_motor)
 		self.omega_hover_in_rad = self.UAV_RPM_hover * (2 * np.pi / 60)
 		self.kt = self.thrust_in_H_for_each_motor / self.omega_hover_in_rad ** 2
-		print("k_t =", self.kt)
 		self.C_Q_in_Hm_per_RPM2 = 2.44 * 10 ** (-10)
 		self.current_step_energy_consumption_E = 0.0
 		self.km = self.C_Q_in_Hm_per_RPM2 * (60 / (2 * np.pi)) ** 2
-		print("k_m =", self.km)
+		self.drag_coefficients_baseline = np.array([
+			0.1, 0.1, 0.1
+		])
 		self.drag_coefficients = np.array([
 			0.1, 0.1, 0.1
 		])
@@ -56,7 +58,7 @@ class UAV_6DoF_Model_Environment:
 		self.F_g = np.array([0, 0, -self.UAV_mass_in_kg * 9.8])
 		self.inertia_moment_J = self.get_moment_inertia_J()
 
-		self.x_y_coeffs_for_min_max = {"x": 2, "y": 2}
+		self.x_y_coeffs_for_min_max = {"x": 20, "y": 20}
 
 		self.state_space_restrictions = state_space_restrictions
 		self.action_space_restrictions = {
@@ -148,8 +150,26 @@ class UAV_6DoF_Model_Environment:
 
 		return next_state_vector, current_state_vector_reward, self.target_done
 
-	def reset_environment(self, rng = np.random):
+	def reset_environment(self, rng = np.random, train_mode: bool = True):
+		if train_mode:
+			rand_start_position_x = round(np.random.uniform(-0.5, 0.5), 3)
+			rand_start_position_y = round(np.random.uniform(-0.5, 0.5), 3)
+			rand_start_position_z = round(np.random.uniform(
+				self.hover_stabilization_height_in_m - self.epsilon,
+				self.hover_stabilization_height_in_m + self.epsilon
+			), 3)
+			self.init_state_vector = {
+				"p": np.array([rand_start_position_x, rand_start_position_y, rand_start_position_z]),
+				"v": np.array([0, 0, 0]), "q": np.array([1, 0, 0, 0]),
+				"omega": np.array([0, 0, 0])
+			}
+			self.UAV_mass_in_kg = self.UAV_mass_in_kg_baseline * np.random.uniform(0.95, 1.05)
+			self.drag_coefficients = self.drag_coefficients_baseline * np.random.uniform(0.9, 1.1)
+		
 		self.current_state_vector = copy.deepcopy(self.init_state_vector)
+		self.current_state_euler_angeles = np.array([0.0, 0.0, 0.0])
+		self.next_state_euler_angeles = np.array([0.0, 0.0, 0.0])
+
 		self.next_state_vector = {"p": [], "v": [], "q": [], "omega": []}
 		if self.uav_action_name == "ascent":
 			self.action_space_values = np.array(
@@ -184,6 +204,9 @@ class UAV_6DoF_Model_Environment:
 		self.define_next_vector_v()
 		self.define_next_vector_q()
 		self.define_next_vector_omega()
+		self.next_state_euler_angeles = self.get_euler_angeles(
+			self.current_state_vector["q"]
+		)
 
 		return self.next_state_vector
 
@@ -198,6 +221,7 @@ class UAV_6DoF_Model_Environment:
 			"q": self.next_state_vector["q"].copy(),
 			"omega": self.next_state_vector["omega"].copy()
 		}
+		self.next_state_euler_angeles = self.current_state_euler_angeles.copy()
 
 	def reset_next_state_vector(self):
 		self.next_state_vector = {"p": [], "v": [], "q": [], "omega": []}
@@ -217,7 +241,7 @@ class UAV_6DoF_Model_Environment:
 	def check_current_state_vector_components_to_episode_termination(self):
 		if self.is_episode_termination_by_p_vector_component():
 			self.episode_termination = True
-		if self.is_episode_termination_by_q_vector_component():
+		if self.is_episode_termination_by_euler_angeles_component():
 			self.episode_termination = True
 		if self.target_done == 1:
 			self.episode_termination = True
@@ -231,28 +255,30 @@ class UAV_6DoF_Model_Environment:
 				return True
 		return False
 
-	def is_episode_termination_by_q_vector_component(self):
-		q_restricted_components = [int(component[-1]) for component in self.state_space_restrictions["q"].keys()]
-		for q_component in q_restricted_components:
-			vector_component_min = self.state_space_restrictions["q"][f"q{q_component}"][0]
-			vector_component_max = self.state_space_restrictions["q"][f"q{q_component}"][1]
-			component_value = self.current_state_vector["q"][q_component]
-			if component_value > vector_component_max or component_value < vector_component_min:
+	def is_episode_termination_by_euler_angeles_component(self):
+		restricted_angeles = ["fi", "teta", "psi"]
+		for (i, euler_angel) in enumerate(restricted_angeles):
+			euler_angel_min = self.state_space_restrictions["angeles"][euler_angel][0]
+			euler_angel_max = self.state_space_restrictions["angeles"][euler_angel][1]
+			component_value = self.current_state_euler_angeles[i]
+			if component_value > euler_angel_max or component_value < euler_angel_min:
 				return True
 		return False
 
 	def update_state_space_restrictions(self):
 		for (p_component, coeff) in self.x_y_coeffs_for_min_max.items():
 			self.state_space_restrictions["p"][p_component] = [
-				-coeff * self.hover_stabilization_height_in_m, coeff * self.hover_stabilization_height_in_m
+				# -coeff * self.hover_stabilization_height_in_m, coeff * self.hover_stabilization_height_in_m
+				-5.0, 5.0
 			]
-		self.state_space_restrictions["p"]["z"] = [0, 2 * self.hover_stabilization_height_in_m]
+
+		self.state_space_restrictions["p"]["z"] = [0, 5.0]
 
 	def update_thrust_force_F_b_t(self):
 		self.thrust_force_F_b_t = np.array([0, 0, self.T_sum])
 
 	def update_action_values(self, action_t: np.array):
-		self.action_space_values = self.omega_hover_in_rad * (1 + 0.6 * action_t)
+		self.action_space_values = self.omega_hover_in_rad * (1 + action_t)
 
 	def update_motors_Ti_for_tau_x_y(self):
 		for (action_value, motor_Ti) in zip(self.action_space_values, self.motors_T.keys()):
@@ -284,6 +310,7 @@ class UAV_6DoF_Model_Environment:
 		if self.external_drag_disturbance and self.external_wind_disturbance:
 			F_drag = self.get_drag_force()
 			self.define_current_step_wind_velocity()
+			# TODO: think, how to update wind_force from article-3(parameters uncertanty!)
 			F_wind = self.get_wind_gust_force()
 			acceleration = (F_world + self.F_g + F_drag + F_wind) / self.UAV_mass_in_kg
 		elif self.external_drag_disturbance:
@@ -355,7 +382,7 @@ class UAV_6DoF_Model_Environment:
 
 	def define_next_vector_q(self):
 		multiplication_of_Omega_omega_t_and_q = self.get_dot_product_of_Omega_matrix_and_quaternion()
-		self.next_state_vector["q"] = self.current_state_vector["q"] + self.delta_t_in_sec / 2 * multiplication_of_Omega_omega_t_and_q
+		self.next_state_vector["q"] = self.current_state_vector["q"] + (self.delta_t_in_sec / 2) * multiplication_of_Omega_omega_t_and_q
 		self.normalize_next_state_quaternion()
 
 	def normalize_next_state_quaternion(self):
@@ -441,13 +468,11 @@ class UAV_6DoF_Model_Environment:
 		else:
 			self.success_stage_trajectory = False
 
-		if self.current_state_vector["p"][2] <= 0:
-			current_state_vector_reward -= self.reward_crash_penalty
+		current_state_vector_reward -= self.reward_crash_penalty
 
 		return current_state_vector_reward
 
 	def update_reward_penalties_by_vector_components(self):
-		euler_angeles = self.get_euler_angeles(self.current_state_vector["q"])
 		self.reward_penalties_by_components["p"] = self.reward_coefs["alpha"] * self.get_vector_deviation_from_target(
 			"p", [0, 1, 2], self.target_p_components_for_hover_stabilization_in_m
 		)
@@ -455,7 +480,7 @@ class UAV_6DoF_Model_Environment:
 			"v", [0, 1, 2], [0.0, 0.0, 0.0]
 		)
 		self.reward_penalties_by_components["angeles"] = self.reward_coefs["gamma"] * self.get_angeles_deviation_from_target(
-			euler_angeles, np.array([0.0, 0.0, 0.0])
+			self.current_state_euler_angeles, np.array([0.0, 0.0, 0.0])
 		)
 		self.reward_penalties_by_components["E"] = self.reward_coefs["delta"] * self.current_step_energy_consumption_E
 
