@@ -2,11 +2,12 @@
 import numpy as np
 
 class PID_Controller_6DoF:
-	def __init__(self):
+	def __init__(self, target_position_z: float):
+		self.target_position_z = target_position_z
 		self.delta_t_in_sec = 0.01
 		self.F_g = 9.8
 
-		self.target_position = np.array([0, 0, 0.5])
+		self.target_position = np.array([0, 0, self.target_position_z])
 		self.target_yaw_psi = 0.0
 
 		self.PID_x = PID_Controller(
