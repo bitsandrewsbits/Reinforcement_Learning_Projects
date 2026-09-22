@@ -9,26 +9,42 @@ import UAV_6DoF_model_environment as uav_env
 import additional_functions as adf
 
 class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
-	def __init__(self):
+	def __init__(self,
+	start_position_x: float, start_position_y: float, start_position_z: float,
+	hover_stabilization_height_in_m: float, hover_time_in_sec: float,
+	external_drag_disturbance: bool, external_wind_disturbance: bool,
+	simulation_max_steps: int, train_mode = True):
 		super().__init__()
 
+		self.start_position_x = start_position_x
+		self.start_position_y = start_position_y
+		self.start_position_z = start_position_z
+		self.hover_stabilization_height_in_m = hover_stabilization_height_in_m
+		self.hover_time_in_sec = hover_time_in_sec
+		self.simulation_max_steps = simulation_max_steps
+		self.external_drag_disturbance = external_drag_disturbance
+		self.external_wind_disturbance = external_wind_disturbance
+		self.train_mode = train_mode
 		self.uav_6dof_env = uav_env.UAV_6DoF_Model_Environment(
-			'hover_stabilization', 0.99,
-			{"alpha": 2, "beta": 0.4, "gamma": 1.2, "delta": 0.05},
-			{
-				"p": np.array([0, 0, 0.5]), "v": np.array([0, 0, 0]),
-				"q": np.array([1, 0, 0, 0]), "omega": np.array([0, 0, 0])
+			uav_action_name = 'hover_stabilization',
+			discount_gamma = 0.99,
+			reward_coefs = {"alpha": 2.0, "beta": 0.4, "gamma": 1.2, "delta": 0.05},
+			init_state_vector = {
+				"p": np.array([self.start_position_x, self.start_position_y, self.start_position_z]),
+				"v": np.array([0, 0, 0]),
+				"q": np.array([1, 0, 0, 0]),
+				"omega": np.array([0, 0, 0])
 			},
-			{
+			state_space_restrictions = {
 				"p": {"x": ["min_x", "max_x"], "y": ["min_y", "max_y"], "z": [0, "max_height"]}, 
-				"q": {"q1": [-0.7, 0.7], "q2": [-0.7, 0.7]}
+				"angeles": {"fi": [-60, 60], "teta": [-60, 60], "psi": [-180, 180]}
 			},
-			hover_stabilization_height_in_m = 0.5,
-			hover_time_in_sec = 10,
-			max_diviation_from_hover_height = 0.2,
-			simulation_steps = 1000,
-			external_drag_disturbance = False,
-			external_wind_disturbance = False
+			hover_stabilization_height_in_m = self.hover_stabilization_height_in_m,
+			hover_time_in_sec = self.hover_time_in_sec,
+			max_diviation_from_hover_height = 0.1,
+			external_drag_disturbance = self.external_drag_disturbance,
+			external_wind_disturbance = self.external_wind_disturbance,
+			simulation_steps = self.simulation_max_steps
 		)
 		self.observation_space = Box(
 			low = -10000,
@@ -45,7 +61,9 @@ class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 
 	def reset(self, seed = None, options = None):
 		super().reset(seed = seed)
-		init_state_vector, info = self.uav_6dof_env.reset_environment(self.np_random)
+		init_state_vector, info = self.uav_6dof_env.reset_environment(
+			self.np_random, train_mode = self.train_mode
+		)
 		init_observation_vector = self.get_observation_vector(init_state_vector)
 		return init_observation_vector, info
 
