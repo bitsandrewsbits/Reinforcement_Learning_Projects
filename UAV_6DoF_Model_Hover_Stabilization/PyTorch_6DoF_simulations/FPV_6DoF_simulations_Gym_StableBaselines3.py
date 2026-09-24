@@ -80,25 +80,14 @@ test_episode_steps: int = 200, hover_time_in_steps: int = 100):
 		current_episode_step += 1
 	return result
 
-def get_test_env_with_random_init_params(train_mode, random_start_position, target_z):
-	if random_start_position:
-		start_env_position_x = np.random.uniform(-0.5, 0.5)
-		start_env_position_y = np.random.uniform(-0.5, 0.5)
-		start_env_position_z = np.random.uniform(0.05, 0.25)
-	else:
-		start_env_position_x = 0.0
-		start_env_position_y = 0.0
-		start_env_position_z = 0.15
+def get_test_env_with_random_init_params(DR_mode, target_z, hover_time_in_sec = 5.0):
 	test_env = adpt_gym_env.UAV_6DoF_Adapter_For_GymEnv(
-		start_position_x = start_env_position_x,
-		start_position_y = start_env_position_y,
-		start_position_z = start_env_position_z,
 		hover_stabilization_height_in_m = target_z,
-		hover_time_in_sec = 5.0,
+		hover_time_in_sec = hover_time_in_sec,
 		external_drag_disturbance = False,
 		external_wind_disturbance = False,
 		simulation_max_steps = 1000,
-		train_mode = train_mode
+		DR_mode = DR_mode
 	)
 	return test_env
 
@@ -315,16 +304,16 @@ def show_RMSE_comparison_plot(summary_stats: dict[dict]):
 	return fig
  
 if __name__ == "__main__":
-	target_hover_height_in_m = 0.15
+	target_hover_height_in_m = 1.5
 	train_env = adpt_gym_env.UAV_6DoF_Adapter_For_GymEnv(
-		start_position_x = 0.0,
-		start_position_y = 0.0,
-		start_position_z = 0.15,
 		hover_stabilization_height_in_m = target_hover_height_in_m,
 		hover_time_in_sec = 3.0,
 		external_drag_disturbance = False,
 		external_wind_disturbance = False,
-		simulation_max_steps = 1000
+		simulation_max_steps = 1000,
+		level_of_params_uncertanty = "delta_1",
+		wind_gust_disturbance_time_level = "low",
+		DR_mode = True
 	)
 	
 	model_PID = pid6dof.PID_Controller_6DoF(
@@ -393,8 +382,9 @@ if __name__ == "__main__":
 	test_simulation_num = 100
 	for _ in range(test_simulation_num):
 		test_env = get_test_env_with_random_init_params(
-			train_mode = False, random_start_position = False,
-			target_z = target_hover_height_in_m
+			DR_mode = True,
+			target_z = target_hover_height_in_m,
+			hover_time_in_sec = 10.0
 		)
 
 		pid_result = get_PID_algorithm_simulation_result(
