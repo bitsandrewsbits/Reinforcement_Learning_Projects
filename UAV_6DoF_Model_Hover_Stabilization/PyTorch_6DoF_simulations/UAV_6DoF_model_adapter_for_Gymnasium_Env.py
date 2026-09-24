@@ -10,27 +10,26 @@ import additional_functions as adf
 
 class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 	def __init__(self,
-	start_position_x: float, start_position_y: float, start_position_z: float,
 	hover_stabilization_height_in_m: float, hover_time_in_sec: float,
 	external_drag_disturbance: bool, external_wind_disturbance: bool,
-	simulation_max_steps: int, train_mode = True):
+	simulation_max_steps: int, level_of_params_uncertanty = "delta_0",
+	wind_gust_disturbance_time_level = "low",
+	DR_mode = True):
 		super().__init__()
-
-		self.start_position_x = start_position_x
-		self.start_position_y = start_position_y
-		self.start_position_z = start_position_z
 		self.hover_stabilization_height_in_m = hover_stabilization_height_in_m
 		self.hover_time_in_sec = hover_time_in_sec
 		self.simulation_max_steps = simulation_max_steps
 		self.external_drag_disturbance = external_drag_disturbance
 		self.external_wind_disturbance = external_wind_disturbance
-		self.train_mode = train_mode
+		self.level_of_params_uncertanty = level_of_params_uncertanty
+		self.wind_gust_disturbance_time_level = wind_gust_disturbance_time_level
+		self.DR_mode = DR_mode
 		self.uav_6dof_env = uav_env.UAV_6DoF_Model_Environment(
 			uav_action_name = 'hover_stabilization',
 			discount_gamma = 0.99,
 			reward_coefs = {"alpha": 2.0, "beta": 0.4, "gamma": 1.2, "delta": 0.05},
 			init_state_vector = {
-				"p": np.array([self.start_position_x, self.start_position_y, self.start_position_z]),
+				"p": np.array([0.0, 0.0, 0.0]),
 				"v": np.array([0, 0, 0]),
 				"q": np.array([1, 0, 0, 0]),
 				"omega": np.array([0, 0, 0])
@@ -44,7 +43,10 @@ class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 			max_diviation_from_hover_height = 0.1,
 			external_drag_disturbance = self.external_drag_disturbance,
 			external_wind_disturbance = self.external_wind_disturbance,
-			simulation_steps = self.simulation_max_steps
+			simulation_steps = self.simulation_max_steps,
+			level_of_params_uncertanty = self.level_of_params_uncertanty,
+			wind_gust_disturbance_time_level = self.wind_gust_disturbance_time_level,
+			DR_mode = self.DR_mode
 		)
 		self.observation_space = Box(
 			low = -10000,
@@ -62,7 +64,7 @@ class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 	def reset(self, seed = None, options = None):
 		super().reset(seed = seed)
 		init_state_vector, info = self.uav_6dof_env.reset_environment(
-			self.np_random, train_mode = self.train_mode
+			self.np_random
 		)
 		init_observation_vector = self.get_observation_vector(init_state_vector)
 		return init_observation_vector, info
@@ -88,6 +90,16 @@ class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 		return observation_vector
 
 if __name__ == "__main__":
-	env = UAV_6DoF_Adapter_For_GymEnv()
+	target_hover_height_in_m = 0.15
+	env = UAV_6DoF_Adapter_For_GymEnv(
+		hover_stabilization_height_in_m = target_hover_height_in_m,
+		hover_time_in_sec = 3.0,
+		external_drag_disturbance = False,
+		external_wind_disturbance = False,
+		simulation_max_steps = 1000,
+		level_of_params_uncertanty = "delta_1",
+		wind_gust_disturbance_time_level = "low",
+		DR_mode = False
+	)
 	check_env(env)
 	
