@@ -4,13 +4,16 @@ import pandas as pd
 import random
 import copy
 
+import domain_randomization as dr
+
 class UAV_6DoF_Model_Environment:
 	def __init__(self, uav_action_name: str, discount_gamma, reward_coefs: dict, 
 	init_state_vector: dict, state_space_restrictions: dict, 
 	hover_stabilization_height_in_m, hover_time_in_sec: int,
 	max_diviation_from_hover_height, simulation_steps: int,
-	external_drag_disturbance = True, external_wind_disturbance = True
-	):
+	external_drag_disturbance = True, external_wind_disturbance = True,
+	level_of_params_uncertanty = "delta_0", wind_gust_disturbance_time_level = "low",
+	DR_mode = False):
 		self.uav_action_name = uav_action_name
 		self.discount_gamma = discount_gamma
 		self.reward_coefs = reward_coefs
@@ -27,7 +30,6 @@ class UAV_6DoF_Model_Environment:
 		self.battery_mass_in_kg = 0.9
 		self.battery_voltage_V = 22.2
 		self.UAV_motor_mass_in_kg = 0.0476
-		self.UAV_mass_in_kg_baseline = self.battery_mass_in_kg + 4 * self.UAV_motor_mass_in_kg
 		self.UAV_mass_in_kg = self.battery_mass_in_kg + 4 * self.UAV_motor_mass_in_kg
 		
 		self.UAV_motor_KV = 1300
@@ -39,20 +41,8 @@ class UAV_6DoF_Model_Environment:
 		self.C_Q_in_Hm_per_RPM2 = 2.44 * 10 ** (-10)
 		self.current_step_energy_consumption_E = 0.0
 		self.km = self.C_Q_in_Hm_per_RPM2 * (60 / (2 * np.pi)) ** 2
-		self.drag_coefficients_baseline = np.array([
-			0.1, 0.1, 0.1
-		])
-		self.drag_coefficients = np.array([
-			0.1, 0.1, 0.1
-		])
-		self.previous_wind_velocity = np.zeros(3)
-		self.wind_velocity = self.previous_wind_velocity.copy()
-		self.wind_update_interval_in_steps = 300
-		self.transition_steps_to_update_wind_velocity = 30
-		self.current_transition_steps_to_update_wind_velocity = 0
-		self.air_density_ro = 1.225
-		self.C_D = 1.2
-		self.projected_area_A = np.array([0.018, 0.018, 0])
+		self.drag_coefficients_baseline = np.array([0.1, 0.1, 0.1])
+		self.drag_coefficients = np.array([0.1, 0.1, 0.1])
 
 		self.UAV_wing_shoulder_in_m = 0.1778
 		self.F_g = np.array([0, 0, -self.UAV_mass_in_kg * 9.8])
@@ -111,6 +101,17 @@ class UAV_6DoF_Model_Environment:
 		self.RNG = np.random
 		self.external_drag_disturbance = external_drag_disturbance
 		self.external_wind_disturbance = external_wind_disturbance
+		self.level_of_params_uncertanty = level_of_params_uncertanty
+		self.wind_gust_disturbance_time_level = wind_gust_disturbance_time_level
+		self.domain_randomization = DR_mode
+		if self.domain_randomization:
+			self.domain_randomizer = dr.Domain_Randomization_For_6DoF(
+				drone_mass = self.UAV_mass_in_kg,
+				level_of_params_uncertanty = self.level_of_params_uncertanty,
+				external_wind_disturbance = self.external_wind_disturbance,
+				wind_gust_disturbance_time_level = self.wind_gust_disturbance_time_level,
+				episode_steps = self.simulation_steps
+			)
 
 	def start_test_simulation(self):
 		self.update_state_space_restrictions()
@@ -150,27 +151,24 @@ class UAV_6DoF_Model_Environment:
 
 		return next_state_vector, current_state_vector_reward, self.target_done
 
-	def reset_environment(self, rng = np.random, train_mode: bool = True):
-		if train_mode:
-			rand_start_position_x = round(np.random.uniform(-0.5, 0.5), 3)
-			rand_start_position_y = round(np.random.uniform(-0.5, 0.5), 3)
-			rand_start_position_z = round(np.random.uniform(
-				self.hover_stabilization_height_in_m - self.epsilon,
-				self.hover_stabilization_height_in_m + self.epsilon
-			), 3)
+	def reset_environment(self, rng = np.random):
+		if self.domain_randomization:
 			self.init_state_vector = {
-				"p": np.array([rand_start_position_x, rand_start_position_y, rand_start_position_z]),
-				"v": np.array([0, 0, 0]), "q": np.array([1, 0, 0, 0]),
+				"p": self.domain_randomizer.get_random_state_vector_components(
+					np.array([0.0, 0.0, self.hover_stabilization_height_in_m])
+				),
+				"v": np.array([0, 0, 0]),
+				"q": np.array([1, 0, 0, 0]),
 				"omega": np.array([0, 0, 0])
 			}
-			self.UAV_mass_in_kg = self.UAV_mass_in_kg_baseline * np.random.uniform(0.95, 1.05)
-			self.drag_coefficients = self.drag_coefficients_baseline * np.random.uniform(0.9, 1.1)
-		
+			self.UAV_mass_in_kg = self.domain_randomizer.get_random_drone_mass()
+			self.drag_coefficients = self.domain_randomizer.get_random_drag(self.drag_coefficients_baseline)
+
 		self.current_state_vector = copy.deepcopy(self.init_state_vector)
 		self.current_state_euler_angeles = np.array([0.0, 0.0, 0.0])
 		self.next_state_euler_angeles = np.array([0.0, 0.0, 0.0])
-
 		self.next_state_vector = {"p": [], "v": [], "q": [], "omega": []}
+		
 		if self.uav_action_name == "ascent":
 			self.action_space_values = np.array(
 				[0, 0, 0, 0], dtype = np.float32
@@ -182,6 +180,7 @@ class UAV_6DoF_Model_Environment:
 				self.omega_hover_in_rad,
 				self.omega_hover_in_rad
 			], dtype = np.float32)
+		
 		self.T_sum = 0.0
 		self.thrust_force_F_b_t = np.array([0, 0, self.T_sum])
 		self.motors_T = {"T1": 0.0, "T2": 0.0, "T3": 0.0, "T4": 0.0}
@@ -278,7 +277,7 @@ class UAV_6DoF_Model_Environment:
 		self.thrust_force_F_b_t = np.array([0, 0, self.T_sum])
 
 	def update_action_values(self, action_t: np.array):
-		self.action_space_values = self.omega_hover_in_rad * (1 + action_t)
+		self.action_space_values = self.omega_hover_in_rad * (1 + 0.6 * action_t)
 
 	def update_motors_Ti_for_tau_x_y(self):
 		for (action_value, motor_Ti) in zip(self.action_space_values, self.motors_T.keys()):
@@ -309,16 +308,13 @@ class UAV_6DoF_Model_Environment:
 		F_world = self.get_dot_product_of_quaternion_rotation_matrix_and_F_b_t()
 		if self.external_drag_disturbance and self.external_wind_disturbance:
 			F_drag = self.get_drag_force()
-			self.define_current_step_wind_velocity()
-			# TODO: think, how to update wind_force from article-3(parameters uncertanty!)
-			F_wind = self.get_wind_gust_force()
+			F_wind = self.domain_randomizer.get_F_wind_gust()
 			acceleration = (F_world + self.F_g + F_drag + F_wind) / self.UAV_mass_in_kg
 		elif self.external_drag_disturbance:
 			F_drag = self.get_drag_force()
 			acceleration = (F_world + self.F_g + F_drag) / self.UAV_mass_in_kg
 		elif self.external_wind_disturbance:
-			self.define_current_step_wind_velocity()
-			F_wind = self.get_wind_gust_force()
+			F_wind = self.domain_randomizer.get_F_wind_gust()
 			acceleration = (F_world + self.F_g + F_wind) / self.UAV_mass_in_kg
 		else:
 			acceleration = (F_world + self.F_g) / self.UAV_mass_in_kg
@@ -347,38 +343,6 @@ class UAV_6DoF_Model_Environment:
 
 	def get_drag_force(self):
 		return -self.drag_coefficients * self.current_state_vector["v"]
-
-	def get_wind_gust_force(self):
-		v_relative = self.wind_velocity - self.current_state_vector["v"]
-		wind_gust_force = 0.5 * self.air_density_ro * (self.C_D * self.projected_area_A) * abs(v_relative) * v_relative
-		return wind_gust_force
-
-	def define_current_step_wind_velocity(self):
-		if self.current_step % self.wind_update_interval_in_steps == 0:
-			self.generate_wind_velocity()
-		else:
-			self.update_wind_velocity_to_new_via_transition()
-
-	def generate_wind_velocity(self):
-		self.previous_wind_velocity = self.wind_velocity.copy()
-		self.wind_velocity = np.array([
-			self.RNG.uniform(-2, 2),
-			self.RNG.uniform(-2, 2),
-			0.0
-		])
-		self.current_steps_to_update_wind_velocity = 0
-
-	def update_wind_velocity_to_new_via_transition(self):
-		alpha = self.get_wind_velocity_transition_coeff_alpha()
-		if alpha <= 1:
-			self.wind_velocity = (1 - alpha) * self.previous_wind_velocity + alpha * self.wind_velocity
-		else:
-			self.current_transitions_steps_to_update_wind_velocity = 0
-
-	def get_wind_velocity_transition_coeff_alpha(self):
-		alpha = round(self.current_transition_steps_to_update_wind_velocity / self.transition_steps_to_update_wind_velocity, 5)
-		self.current_transition_steps_to_update_wind_velocity += 1
-		return alpha
 
 	def define_next_vector_q(self):
 		multiplication_of_Omega_omega_t_and_q = self.get_dot_product_of_Omega_matrix_and_quaternion()
@@ -468,7 +432,8 @@ class UAV_6DoF_Model_Environment:
 		else:
 			self.success_stage_trajectory = False
 
-		current_state_vector_reward -= self.reward_crash_penalty
+		if self.current_state_vector["p"][2] <= 0:
+			current_state_vector_reward -= self.reward_crash_penalty
 
 		return current_state_vector_reward
 
