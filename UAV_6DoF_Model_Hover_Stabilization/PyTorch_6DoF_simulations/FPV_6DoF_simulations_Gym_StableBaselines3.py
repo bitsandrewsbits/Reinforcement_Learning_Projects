@@ -305,9 +305,14 @@ def show_RMSE_comparison_plot(summary_stats: dict[dict]):
  
 if __name__ == "__main__":
 	target_hover_height_in_m = 1.5
+	target_train_hover_time_in_sec = 3.0
+	target_test_hover_time_in_sec = 10.0
+	delta_t_in_sec = 0.01
+	test_episode_steps = int(target_test_hover_time_in_sec / delta_t_in_sec)
+
 	train_env = adpt_gym_env.UAV_6DoF_Adapter_For_GymEnv(
 		hover_stabilization_height_in_m = target_hover_height_in_m,
-		hover_time_in_sec = 3.0,
+		hover_time_in_sec = target_train_hover_time_in_sec,
 		external_drag_disturbance = False,
 		external_wind_disturbance = False,
 		simulation_max_steps = 1000,
@@ -384,20 +389,20 @@ if __name__ == "__main__":
 		test_env = get_test_env_with_random_init_params(
 			DR_mode = True,
 			target_z = target_hover_height_in_m,
-			hover_time_in_sec = 10.0
+			hover_time_in_sec = target_test_hover_time_in_sec
 		)
 
 		pid_result = get_PID_algorithm_simulation_result(
 			test_env, model_PID, "PID_Controller",
-			test_episode_steps = 500
+			test_episode_steps = test_episode_steps
 		)
 		ppo_result = get_RL_algorithm_simulation_result(
 			test_env, trained_PPO, "PPO_RL_algorithm",
-			test_episode_steps = 500
+			test_episode_steps = test_episode_steps
 		)
 		sac_result = get_RL_algorithm_simulation_result(
 			test_env, trained_SAC, "SAC_RL_algorithm",
-			test_episode_steps = 500
+			test_episode_steps = test_episode_steps
 		)
 		all_simulations_results["PID_Controller"].append(pid_result)
 		all_simulations_results["PPO_RL_algorithm"].append(ppo_result)
