@@ -47,15 +47,29 @@ class Domain_Randomization_For_6DoF:
 	def update_current_episode_step(self, episode_step_from_env):
 		self.current_episode_step = episode_step_from_env
 
-	def get_random_state_vector_components(self, state_vector_component: np.array) -> np.array:
+	def get_random_state_vector_position_components(self, state_vector_component: np.array) -> np.array:
 		new_components = []
 		for component in state_vector_component:
-			new_components.append(self.get_random_state_vector_component(component))
+			new_components.append(self.get_random_state_vector_position_component(component))
 		return np.array(new_components)
 
-	def get_random_state_vector_component(self, component: float):
+	def get_random_state_vector_position_component(self, component: float):
 		if component == 0.0:
 			component = np.random.uniform(-1, 1)
+		random_deviation_coefficient = np.random.uniform(
+			-self.params_uncertanty_value, self.params_uncertanty_value
+		)
+		return component * (1 + random_deviation_coefficient)
+
+	def get_random_state_vector_angel_components(self, state_vector_component: np.array) -> np.array:
+		new_components = []
+		for component in state_vector_component:
+			new_components.append(self.get_random_state_vector_angel_component(component))
+		return np.array(new_components)
+
+	def get_random_state_vector_angel_component(self, component: float):
+		if component == 0.0:
+			component = np.random.uniform(-45, 45)
 		random_deviation_coefficient = np.random.uniform(
 			-self.params_uncertanty_value, self.params_uncertanty_value
 		)
