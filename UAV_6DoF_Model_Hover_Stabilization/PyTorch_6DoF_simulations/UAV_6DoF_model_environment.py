@@ -104,7 +104,7 @@ class UAV_6DoF_Model_Environment:
 		self.level_of_params_uncertanty = level_of_params_uncertanty
 		self.wind_gust_disturbance_time_level = wind_gust_disturbance_time_level
 		self.domain_randomization = DR_mode
-		if self.domain_randomization:
+		if self.domain_randomization or self.external_drag_disturbance or self.external_wind_disturbance:
 			self.domain_randomizer = dr.Domain_Randomization_For_6DoF(
 				drone_mass = self.UAV_mass_in_kg,
 				level_of_params_uncertanty = self.level_of_params_uncertanty,
@@ -154,13 +154,18 @@ class UAV_6DoF_Model_Environment:
 	def reset_environment(self, rng = np.random):
 		if self.domain_randomization:
 			self.init_state_vector = {
-				"p": self.domain_randomizer.get_random_state_vector_components(
+				"p": self.domain_randomizer.get_random_state_vector_position_components(
 					np.array([0.0, 0.0, self.hover_stabilization_height_in_m])
 				),
 				"v": np.array([0, 0, 0]),
 				"q": np.array([1, 0, 0, 0]),
 				"omega": np.array([0, 0, 0])
 			}
+			self.current_state_euler_angeles = self.domain_randomizer.get_random_state_vector_angel_components(
+				np.array([0.0, 0.0, 0.0])
+			)
+			self.next_state_euler_angeles = self.current_state_euler_angeles.copy()
+
 			self.UAV_mass_in_kg = self.domain_randomizer.get_random_drone_mass()
 			self.drag_coefficients = self.domain_randomizer.get_random_drag(self.drag_coefficients_baseline)
 
@@ -220,7 +225,7 @@ class UAV_6DoF_Model_Environment:
 			"q": self.next_state_vector["q"].copy(),
 			"omega": self.next_state_vector["omega"].copy()
 		}
-		self.next_state_euler_angeles = self.current_state_euler_angeles.copy()
+		self.current_state_euler_angeles = self.next_state_euler_angeles.copy()
 
 	def reset_next_state_vector(self):
 		self.next_state_vector = {"p": [], "v": [], "q": [], "omega": []}
@@ -266,10 +271,7 @@ class UAV_6DoF_Model_Environment:
 
 	def update_state_space_restrictions(self):
 		for (p_component, coeff) in self.x_y_coeffs_for_min_max.items():
-			self.state_space_restrictions["p"][p_component] = [
-				# -coeff * self.hover_stabilization_height_in_m, coeff * self.hover_stabilization_height_in_m
-				-5.0, 5.0
-			]
+			self.state_space_restrictions["p"][p_component] = [-5.0, 5.0]
 
 		self.state_space_restrictions["p"]["z"] = [0, 5.0]
 
