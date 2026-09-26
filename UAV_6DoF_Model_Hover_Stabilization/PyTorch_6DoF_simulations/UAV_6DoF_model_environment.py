@@ -30,6 +30,7 @@ class UAV_6DoF_Model_Environment:
 		self.battery_mass_in_kg = 0.9
 		self.battery_voltage_V = 22.2
 		self.UAV_motor_mass_in_kg = 0.0476
+		self.UAV_mass_in_kg_baseline = self.battery_mass_in_kg + 4 * self.UAV_motor_mass_in_kg
 		self.UAV_mass_in_kg = self.battery_mass_in_kg + 4 * self.UAV_motor_mass_in_kg
 		
 		self.UAV_motor_KV = 1300
@@ -106,11 +107,11 @@ class UAV_6DoF_Model_Environment:
 		self.domain_randomization = DR_mode
 		if self.domain_randomization or self.external_drag_disturbance or self.external_wind_disturbance:
 			self.domain_randomizer = dr.Domain_Randomization_For_6DoF(
-				drone_mass = self.UAV_mass_in_kg,
 				level_of_params_uncertanty = self.level_of_params_uncertanty,
 				external_wind_disturbance = self.external_wind_disturbance,
 				wind_gust_disturbance_time_level = self.wind_gust_disturbance_time_level,
-				episode_steps = self.simulation_steps
+				episode_steps = self.simulation_steps,
+				rng = self.RNG
 			)
 
 	def start_test_simulation(self):
@@ -138,21 +139,23 @@ class UAV_6DoF_Model_Environment:
 		self.update_moments_tau()
 		self.define_current_step_energy_consumption_E()
 		next_state_vector = self.get_next_state_vector()
+
 		if self.uav_action_name == "ascent":
 			current_state_vector_reward = self.get_reward_for_current_state_vector_ascent_stage()
 		elif self.uav_action_name == "hover_stabilization":
 			current_state_vector_reward = self.get_reward_for_current_state_vector_hover_stabilization_stage()
 
 		self.check_current_state_vector_components_to_episode_termination()
-		
 		self.make_next_state_vector_as_current()
 		self.reset_next_state_vector()
 		self.current_step += 1
+		self.domain_randomizer.update_current_episode_step(self.current_step)
 
 		return next_state_vector, current_state_vector_reward, self.target_done
 
 	def reset_environment(self, rng = np.random):
 		if self.domain_randomization:
+			self.domain_randomizer.rng = rng
 			self.init_state_vector = {
 				"p": self.domain_randomizer.get_random_state_vector_position_components(
 					np.array([0.0, 0.0, self.hover_stabilization_height_in_m])
@@ -166,8 +169,10 @@ class UAV_6DoF_Model_Environment:
 			)
 			self.next_state_euler_angeles = self.current_state_euler_angeles.copy()
 
-			self.UAV_mass_in_kg = self.domain_randomizer.get_random_drone_mass()
-			self.drag_coefficients = self.domain_randomizer.get_random_drag(self.drag_coefficients_baseline)
+			self.UAV_mass_in_kg = self.domain_randomizer.get_random_drone_mass(
+				self.UAV_mass_in_kg_baseline
+			)
+			self.F_g = np.array([0, 0, -self.UAV_mass_in_kg * 9.8])
 
 		self.current_state_vector = copy.deepcopy(self.init_state_vector)
 		self.current_state_euler_angeles = np.array([0.0, 0.0, 0.0])
@@ -308,15 +313,26 @@ class UAV_6DoF_Model_Environment:
 
 	def define_next_vector_v(self):
 		F_world = self.get_dot_product_of_quaternion_rotation_matrix_and_F_b_t()
+		# print("FPV mass =", self.UAV_mass_in_kg)
 		if self.external_drag_disturbance and self.external_wind_disturbance:
+			self.drag_coefficients = self.domain_randomizer.get_random_drag_coefficients(
+				self.drag_coefficients_baseline
+			)
 			F_drag = self.get_drag_force()
-			F_wind = self.domain_randomizer.get_F_wind_gust()
+			F_wind = self.domain_randomizer.get_F_wind_gust(
+				self.current_state_vector["v"], self.F_g
+			)
 			acceleration = (F_world + self.F_g + F_drag + F_wind) / self.UAV_mass_in_kg
 		elif self.external_drag_disturbance:
+			self.drag_coefficients = self.domain_randomizer.get_random_drag_coefficients(
+				self.drag_coefficients_baseline
+			)
 			F_drag = self.get_drag_force()
 			acceleration = (F_world + self.F_g + F_drag) / self.UAV_mass_in_kg
 		elif self.external_wind_disturbance:
-			F_wind = self.domain_randomizer.get_F_wind_gust()
+			F_wind = self.domain_randomizer.get_F_wind_gust(
+				self.current_state_vector["v"], self.F_g
+			)
 			acceleration = (F_world + self.F_g + F_wind) / self.UAV_mass_in_kg
 		else:
 			acceleration = (F_world + self.F_g) / self.UAV_mass_in_kg
@@ -426,6 +442,12 @@ class UAV_6DoF_Model_Environment:
 		current_state_vector_reward = 0
 		sum_penalty = self.get_sum_penalty()
 		current_state_vector_reward -= sum_penalty
+
+		if self.current_state_vector["p"][2] >= self.hover_stabilization_height_in_m - self.epsilon:
+			if self.current_state_vector["p"][2] <= self.hover_stabilization_height_in_m + self.epsilon:
+				self.hover_steps_amount += 1
+		else:
+			self.hover_steps_amount = 0
 
 		if self.hover_steps_amount == self.target_hover_steps_amount:
 			current_state_vector_reward += 500
