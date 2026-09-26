@@ -3,15 +3,14 @@
 import numpy as np
 
 class Domain_Randomization_For_6DoF:
-	def __init__(self, drone_mass: float, level_of_params_uncertanty: str,
+	def __init__(self, level_of_params_uncertanty: str,
 	external_wind_disturbance: bool, wind_gust_disturbance_time_level: str,
-	episode_steps: int):
-		self.drone_mass = drone_mass
-		self.F_g = np.array([0, 0, -self.drone_mass * 9.8])
+	episode_steps: int, rng = np.random):
 		self.level_of_params_uncertanty = level_of_params_uncertanty
 		self.external_wind_disturbance = external_wind_disturbance
 		self.wind_gust_disturbance_time_level = wind_gust_disturbance_time_level
 		self.episode_steps = episode_steps
+		self.rng = rng
 		self.levels_6DoF_parameters_uncertanty = {
 			"delta_0": 0.0, "delta_1": 0.1,
 			"delta_2": 0.2, "delta_3": 0.3
@@ -42,7 +41,7 @@ class Domain_Randomization_For_6DoF:
 		self.current_episode_step = 0
 
 	def get_F_gust_start_point_in_episode(self):
-		return np.random.uniform(0, self.episode_steps // 2)
+		return self.rng.uniform(0, self.episode_steps // 2)
 
 	def update_current_episode_step(self, episode_step_from_env):
 		self.current_episode_step = episode_step_from_env
@@ -55,8 +54,8 @@ class Domain_Randomization_For_6DoF:
 
 	def get_random_state_vector_position_component(self, component: float):
 		if component == 0.0:
-			component = np.random.uniform(-1, 1)
-		random_deviation_coefficient = np.random.uniform(
+			component = self.rng.uniform(-1, 1)
+		random_deviation_coefficient = self.rng.uniform(
 			-self.params_uncertanty_value, self.params_uncertanty_value
 		)
 		return component * (1 + random_deviation_coefficient)
@@ -69,31 +68,30 @@ class Domain_Randomization_For_6DoF:
 
 	def get_random_state_vector_angel_component(self, component: float):
 		if component == 0.0:
-			component = np.random.uniform(-45, 45)
+			component = self.rng.uniform(-30, 30)
 		random_deviation_coefficient = np.random.uniform(
 			-self.params_uncertanty_value, self.params_uncertanty_value
 		)
 		return component * (1 + random_deviation_coefficient)
 
-	def get_random_drone_mass(self):
-		return self.drone_mass * np.random.uniform(0.95, 1.05)
+	def get_random_drone_mass(self, drone_mass: float):
+		return drone_mass * self.rng.uniform(0.95, 1.05)
 
-	def get_random_drag(self, drag: np.array):
-		return drag * np.random.uniform(0.9, 1.1)
+	def get_random_drag_coefficients(self, drag: np.array):
+		return drag * self.rng.uniform(0.9, 1.1)
 
-	def get_F_wind_gust(self, current_state_speed_component: np.array):
+	def get_F_wind_gust(self, current_state_speed_component: np.array, F_g: np.array):
 		if self.external_wind_disturbance:
 			F_wind = self.get_F_wind(current_state_speed_component)
-			if self.current_episode_step == self.F_gust_start_point_in_episode:
-				F_gust = self.get_F_gust()
+			F_gust = self.get_F_gust(F_g)
 			F_wind_gust = F_wind + F_gust
 			return F_wind_gust
 		else:
 			return 0.0
 
-	def get_F_gust(self):
+	def get_F_gust(self, F_g: np.array):
 		if self.steps_counter_for_F_gust >= 0 and self.steps_counter_for_F_gust < self.wind_gust_disturbance_in_steps:
-			F_gust = self.F_g
+			F_gust = F_g
 			self.steps_counter_for_F_gust += 1
 		else:
 			self.steps_counter_for_F_gust = 0
@@ -107,7 +105,7 @@ class Domain_Randomization_For_6DoF:
 		return F_wind
 
 	def define_current_step_wind_velocity(self):
-		if self.current_step % self.wind_update_interval_in_steps == 0:
+		if self.current_episode_step % self.wind_update_interval_in_steps == 0:
 			self.generate_wind_velocity()
 		else:
 			self.update_wind_velocity_to_new_via_transition()
@@ -115,8 +113,8 @@ class Domain_Randomization_For_6DoF:
 	def generate_wind_velocity(self):
 		self.previous_wind_velocity = self.wind_velocity.copy()
 		self.wind_velocity = np.array([
-			self.RNG.uniform(-2, 2),
-			self.RNG.uniform(-2, 2),
+			self.rng.uniform(-2, 2),
+			self.rng.uniform(-2, 2),
 			0.0
 		])
 		self.current_steps_to_update_wind_velocity = 0
