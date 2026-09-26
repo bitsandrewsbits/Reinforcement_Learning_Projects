@@ -84,10 +84,12 @@ def get_test_env_with_random_init_params(DR_mode, target_z, hover_time_in_sec = 
 	test_env = adpt_gym_env.UAV_6DoF_Adapter_For_GymEnv(
 		hover_stabilization_height_in_m = target_z,
 		hover_time_in_sec = hover_time_in_sec,
-		external_drag_disturbance = False,
-		external_wind_disturbance = False,
+		external_drag_disturbance = True,
+		external_wind_disturbance = True,
 		simulation_max_steps = 1000,
-		DR_mode = DR_mode
+		DR_mode = DR_mode,
+		level_of_params_uncertanty = "delta_2",
+		wind_gust_disturbance_time_level = "medium"
 	)
 	return test_env
 
@@ -305,7 +307,7 @@ def show_RMSE_comparison_plot(summary_stats: dict[dict]):
  
 if __name__ == "__main__":
 	target_hover_height_in_m = 1.5
-	target_train_hover_time_in_sec = 3.0
+	target_train_hover_time_in_sec = 5.0
 	target_test_hover_time_in_sec = 10.0
 	delta_t_in_sec = 0.01
 	test_episode_steps = int(target_test_hover_time_in_sec / delta_t_in_sec)
@@ -313,11 +315,11 @@ if __name__ == "__main__":
 	train_env = adpt_gym_env.UAV_6DoF_Adapter_For_GymEnv(
 		hover_stabilization_height_in_m = target_hover_height_in_m,
 		hover_time_in_sec = target_train_hover_time_in_sec,
-		external_drag_disturbance = False,
-		external_wind_disturbance = False,
+		external_drag_disturbance = True,
+		external_wind_disturbance = True,
 		simulation_max_steps = 1000,
-		level_of_params_uncertanty = "delta_1",
-		wind_gust_disturbance_time_level = "low",
+		level_of_params_uncertanty = "delta_2",
+		wind_gust_disturbance_time_level = "medium",
 		DR_mode = True
 	)
 	
