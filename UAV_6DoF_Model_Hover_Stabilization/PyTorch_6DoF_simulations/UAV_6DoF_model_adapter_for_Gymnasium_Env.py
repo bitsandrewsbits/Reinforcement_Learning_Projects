@@ -40,7 +40,7 @@ class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 			},
 			hover_stabilization_height_in_m = self.hover_stabilization_height_in_m,
 			hover_time_in_sec = self.hover_time_in_sec,
-			max_diviation_from_hover_height = 0.1,
+			max_diviation_from_hover_height = 0.02,
 			external_drag_disturbance = self.external_drag_disturbance,
 			external_wind_disturbance = self.external_wind_disturbance,
 			simulation_steps = self.simulation_max_steps,
@@ -90,16 +90,16 @@ class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 		return observation_vector
 
 if __name__ == "__main__":
-	target_hover_height_in_m = 0.15
+	target_hover_height_in_m = 0.8
 	env = UAV_6DoF_Adapter_For_GymEnv(
 		hover_stabilization_height_in_m = target_hover_height_in_m,
 		hover_time_in_sec = 3.0,
-		external_drag_disturbance = False,
-		external_wind_disturbance = False,
+		external_drag_disturbance = True,
+		external_wind_disturbance = True,
 		simulation_max_steps = 1000,
 		level_of_params_uncertanty = "delta_1",
 		wind_gust_disturbance_time_level = "low",
-		DR_mode = False
+		DR_mode = True
 	)
 	check_env(env)
 	
