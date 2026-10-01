@@ -93,6 +93,19 @@ def get_test_env_with_random_init_params(DR_mode, target_z, hover_time_in_sec = 
 	)
 	return test_env
 
+def get_train_env_with_random_init_params(DR_mode, target_z, hover_time_in_sec = 5.0):
+	train_env = adpt_gym_env.UAV_6DoF_Adapter_For_GymEnv(
+		hover_stabilization_height_in_m = target_z,
+		hover_time_in_sec = hover_time_in_sec,
+		external_drag_disturbance = True,
+		external_wind_disturbance = True,
+		simulation_max_steps = 1000,
+		DR_mode = DR_mode,
+		level_of_params_uncertanty = "delta_2",
+		wind_gust_disturbance_time_level = "medium"
+	)
+	return train_env
+
 def show_x_y_z_by_t(simulation_results: list[dict], target_z: float):
 	fig = plt.figure(figsize = (16.5, 8.5))
 	plot_x_by_t_for_algorithms(simulation_results)
@@ -311,17 +324,6 @@ if __name__ == "__main__":
 	target_test_hover_time_in_sec = 10.0
 	delta_t_in_sec = 0.01
 	test_episode_steps = int(target_test_hover_time_in_sec / delta_t_in_sec)
-
-	train_env = adpt_gym_env.UAV_6DoF_Adapter_For_GymEnv(
-		hover_stabilization_height_in_m = target_hover_height_in_m,
-		hover_time_in_sec = target_train_hover_time_in_sec,
-		external_drag_disturbance = True,
-		external_wind_disturbance = True,
-		simulation_max_steps = 1000,
-		level_of_params_uncertanty = "delta_2",
-		wind_gust_disturbance_time_level = "medium",
-		DR_mode = True
-	)
 	
 	model_PID = pid6dof.PID_Controller_6DoF(
 		target_position_z = target_hover_height_in_m
@@ -339,7 +341,12 @@ if __name__ == "__main__":
 		)
 	else:
 		model_PPO = PPO(
-			"MlpPolicy", train_env,
+			"MlpPolicy",
+			env = get_train_env_with_random_init_params(
+				DR_mode = True,
+				target_z = target_hover_height_in_m,
+				hover_time_in_sec = target_test_hover_time_in_sec
+			),
 		    learning_rate = 3e-4,
 		    n_steps = 2048,
 			batch_size = 256,
@@ -347,12 +354,12 @@ if __name__ == "__main__":
 			gamma = 0.99,
 			gae_lambda = 0.95,
 			verbose = 0,
-			device = "cuda"
+			device = "cpu"
 		)
 		trained_PPO = train_RL_algorithm(
 			RL_algorithm = model_PPO,
 			RL_algorithm_name = "PPO_RL_algorithm",
-			total_steps = 5e+5,
+			total_steps = 1e+6,
 			save_path = trained_models_path
 		)
 	if "SAC_RL_algorithm_6DoF_hover_stabilization.zip" in os.listdir(trained_models_path):
@@ -364,7 +371,12 @@ if __name__ == "__main__":
 		)
 	else:
 		model_SAC = SAC(
-		    "MlpPolicy", train_env,
+		    "MlpPolicy",
+		    env = get_train_env_with_random_init_params(
+				DR_mode = True,
+				target_z = target_hover_height_in_m,
+				hover_time_in_sec = target_test_hover_time_in_sec
+			),
 		    learning_rate = 3e-4,
 		    batch_size = 256,
 		    gamma = 0.99,
