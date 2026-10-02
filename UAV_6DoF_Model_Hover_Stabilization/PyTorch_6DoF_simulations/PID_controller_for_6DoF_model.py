@@ -5,34 +5,34 @@ class PID_Controller_6DoF:
 	def __init__(self, target_position_z: float):
 		self.target_position_z = target_position_z
 		self.delta_t_in_sec = 0.01
-		self.F_g = 9.8
+		self.g = 9.8
 
 		self.target_position = np.array([0, 0, self.target_position_z])
 		self.target_yaw_psi = 0.0
 
 		self.PID_x = PID_Controller(
-			K_P = 1.0, K_I = 2.0, K_D = 1.0,
+			K_P = 1.5, K_I = 3.0, K_D = 3.0,
 			state_component_name = "x"
 		)
 		self.PID_y = PID_Controller(
-			K_P = 1.0, K_I = 2.0, K_D = 1.0,
+			K_P = 1.5, K_I = 3.0, K_D = 3.0,
 			state_component_name = "y"
 		)
 		self.PID_z = PID_Controller(
-			K_P = 1.0, K_I = 2.0, K_D = 1.0,
+			K_P = 1.5, K_I = 3.0, K_D = 3.0,
 			state_component_name = "z"
 		)
 
 		self.PID_roll_fi = PID_Controller(
-			K_P = 1.0, K_I = 1.0, K_D = 0.1,
+			K_P = 1.5, K_I = 3.0, K_D = 2.2,
 			state_component_name = "roll_fi"
 		)
 		self.PID_pitch_teta = PID_Controller(
-			K_P = 1.0, K_I = 1.0, K_D = 0.1,
+			K_P = 1.5, K_I = 3.0, K_D = 2.2,
 			state_component_name = "pitch_teta"
 		)
 		self.PID_yaw_psi = PID_Controller(
-			K_P = 1.0, K_I = 1.0, K_D = 0.1,
+			K_P = 1.5, K_I = 3.0, K_D = 2.2,
 			state_component_name = "yaw_psi"
 		)
 		self.pid_output_u = np.zeros(4)
@@ -55,10 +55,10 @@ class PID_Controller_6DoF:
 		control_y = self.PID_y.main(self.target_position[1], y, vy)
 		control_z = self.PID_z.main(self.target_position[2], z, vz)
 
-		desired_pitch_teta = control_x / self.F_g
-		desired_roll_fi = -control_y / self.F_g
+		desired_pitch_teta = np.arctan2(np.sin(control_x / self.g), np.cos(control_x / self.g))
+		desired_roll_fi = np.arctan2(np.sin(control_y / self.g), np.cos(control_y / self.g))
 
-		max_angle = np.deg2rad(30.0)
+		max_angle = np.deg2rad(45.0)
 
 		desired_roll_fi = np.clip(
 			desired_roll_fi,
@@ -107,6 +107,7 @@ class PID_Controller_6DoF:
 		actions = np.array([a1, a2, a3, a4])
 		action = np.clip(actions, -1.0, 1.0)
 		self.pid_output_u = action
+		# print("Action:", self.pid_output_u)
 		return action
 
 	def reset(self):
@@ -114,9 +115,9 @@ class PID_Controller_6DoF:
 		self.PID_y.reset()
 		self.PID_z.reset()
 
-		self.PID_roll.reset()
-		self.PID_pitch.reset()
-		self.PID_yaw.reset()
+		self.PID_roll_fi.reset()
+		self.PID_pitch_teta.reset()
+		self.PID_yaw_psi.reset()
 
 	def get_euler_angeles(self, q: list) -> np.array:
 		qw, qx, qy, qz = q
@@ -160,16 +161,13 @@ class PID_Controller:
 		pid_output += self.K_I * integral_error
 		pid_output -= self.K_D * derivative_error
 
-		pid_output = (
-			self.K_P * proportional_error
-			+ self.K_I * integral_error
-			+ self.K_D * derivative_error
-		)
 		self.pid_output = pid_output
 		return pid_output
 
 	def reset(self):
+		self.proportional_error = 0.0
 		self.integral_error = 0.0
+		self.derivative_error = 0.0
 
 	def get_proportional_error(self, target_value, current_value):
 		proportional_error = 0.0
