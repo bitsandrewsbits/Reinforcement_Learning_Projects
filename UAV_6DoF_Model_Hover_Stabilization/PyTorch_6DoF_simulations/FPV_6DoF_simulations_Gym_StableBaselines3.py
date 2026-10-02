@@ -64,6 +64,7 @@ test_episode_steps: int = 200, hover_time_in_steps: int = 100):
 	}
 
 	observation, info = env.reset()
+	PID_controller.reset()
 	current_episode_step = 0
 	while current_episode_step < test_episode_steps:
 		action = PID_controller.main(observation)
@@ -325,6 +326,12 @@ if __name__ == "__main__":
 	delta_t_in_sec = 0.01
 	test_episode_steps = int(target_test_hover_time_in_sec / delta_t_in_sec)
 	
+	train_env = get_train_env_with_random_init_params(
+		DR_mode = True,
+		target_z = target_hover_height_in_m,
+		hover_time_in_sec = target_test_hover_time_in_sec
+	)
+
 	model_PID = pid6dof.PID_Controller_6DoF(
 		target_position_z = target_hover_height_in_m
 	)
@@ -342,11 +349,7 @@ if __name__ == "__main__":
 	else:
 		model_PPO = PPO(
 			"MlpPolicy",
-			env = get_train_env_with_random_init_params(
-				DR_mode = True,
-				target_z = target_hover_height_in_m,
-				hover_time_in_sec = target_test_hover_time_in_sec
-			),
+			env = train_env,
 		    learning_rate = 3e-4,
 		    n_steps = 2048,
 			batch_size = 256,
@@ -372,11 +375,7 @@ if __name__ == "__main__":
 	else:
 		model_SAC = SAC(
 		    "MlpPolicy",
-		    env = get_train_env_with_random_init_params(
-				DR_mode = True,
-				target_z = target_hover_height_in_m,
-				hover_time_in_sec = target_test_hover_time_in_sec
-			),
+		    env = train_env,
 		    learning_rate = 3e-4,
 		    batch_size = 256,
 		    gamma = 0.99,
