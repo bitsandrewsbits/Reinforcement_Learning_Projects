@@ -11,28 +11,28 @@ class PID_Controller_6DoF:
 		self.target_yaw_psi = 0.0
 
 		self.PID_x = PID_Controller(
-			K_P = 1.5, K_I = 3.0, K_D = 3.0,
+			K_P = 11.5, K_I = 3.0, K_D = 20.0,
 			state_component_name = "x"
 		)
 		self.PID_y = PID_Controller(
-			K_P = 1.5, K_I = 3.0, K_D = 3.0,
+			K_P = 11.5, K_I = 3.0, K_D = 20.0,
 			state_component_name = "y"
 		)
 		self.PID_z = PID_Controller(
-			K_P = 1.5, K_I = 3.0, K_D = 3.0,
+			K_P = 11.5, K_I = 3.0, K_D = 20.0,
 			state_component_name = "z"
 		)
 
 		self.PID_roll_fi = PID_Controller(
-			K_P = 1.5, K_I = 3.0, K_D = 2.2,
+			K_P = 10.5, K_I = 3.0, K_D = 2.2,
 			state_component_name = "roll_fi"
 		)
 		self.PID_pitch_teta = PID_Controller(
-			K_P = 1.5, K_I = 3.0, K_D = 2.2,
+			K_P = 10.5, K_I = 3.0, K_D = 2.2,
 			state_component_name = "pitch_teta"
 		)
 		self.PID_yaw_psi = PID_Controller(
-			K_P = 1.5, K_I = 3.0, K_D = 2.2,
+			K_P = 10.5, K_I = 3.0, K_D = 2.2,
 			state_component_name = "yaw_psi"
 		)
 		self.pid_output_u = np.zeros(4)
