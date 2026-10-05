@@ -89,8 +89,8 @@ def get_test_env_with_random_init_params(DR_mode, target_z, hover_time_in_sec = 
 		external_wind_disturbance = True,
 		simulation_max_steps = 1000,
 		DR_mode = DR_mode,
-		level_of_params_uncertanty = "delta_2",
-		wind_gust_disturbance_time_level = "medium"
+		level_of_params_uncertanty = "delta_1",
+		wind_gust_disturbance_time_level = "low"
 	)
 	return test_env
 
@@ -102,8 +102,8 @@ def get_train_env_with_random_init_params(DR_mode, target_z, hover_time_in_sec =
 		external_wind_disturbance = True,
 		simulation_max_steps = 1000,
 		DR_mode = DR_mode,
-		level_of_params_uncertanty = "delta_2",
-		wind_gust_disturbance_time_level = "medium"
+		level_of_params_uncertanty = "delta_1",
+		wind_gust_disturbance_time_level = "low"
 	)
 	return train_env
 
@@ -324,12 +324,13 @@ if __name__ == "__main__":
 	target_train_hover_time_in_sec = 5.0
 	target_test_hover_time_in_sec = 10.0
 	delta_t_in_sec = 0.01
-	test_episode_steps = int(target_test_hover_time_in_sec / delta_t_in_sec)
+	train_episode_hover_steps = int(target_train_hover_time_in_sec / delta_t_in_sec)
+	test_episode_hover_steps = int(target_test_hover_time_in_sec / delta_t_in_sec)
 	
 	train_env = get_train_env_with_random_init_params(
 		DR_mode = True,
 		target_z = target_hover_height_in_m,
-		hover_time_in_sec = target_test_hover_time_in_sec
+		hover_time_in_sec = train_episode_hover_steps
 	)
 
 	model_PID = pid6dof.PID_Controller_6DoF(
@@ -407,15 +408,15 @@ if __name__ == "__main__":
 
 		pid_result = get_PID_algorithm_simulation_result(
 			test_env, model_PID, "PID_Controller",
-			test_episode_steps = test_episode_steps
+			test_episode_steps = test_episode_hover_steps
 		)
 		ppo_result = get_RL_algorithm_simulation_result(
 			test_env, trained_PPO, "PPO_RL_algorithm",
-			test_episode_steps = test_episode_steps
+			test_episode_steps = test_episode_hover_steps
 		)
 		sac_result = get_RL_algorithm_simulation_result(
 			test_env, trained_SAC, "SAC_RL_algorithm",
-			test_episode_steps = test_episode_steps
+			test_episode_steps = test_episode_hover_steps
 		)
 		all_simulations_results["PID_Controller"].append(pid_result)
 		all_simulations_results["PPO_RL_algorithm"].append(ppo_result)
