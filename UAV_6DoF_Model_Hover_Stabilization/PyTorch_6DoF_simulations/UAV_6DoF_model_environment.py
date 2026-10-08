@@ -61,9 +61,7 @@ class UAV_6DoF_Model_Environment:
 
 		self.hover_stabilization_height_in_m = hover_stabilization_height_in_m
 		self.target_p_components_for_hover_stabilization_in_m = [
-			self.init_state_vector["p"][0],
-			self.init_state_vector["p"][1],
-			self.hover_stabilization_height_in_m
+			0.0, 0.0, self.hover_stabilization_height_in_m
 		]
 		self.hover_action_components = {
 			"T_sum": self.UAV_mass_in_kg * 9.8,
