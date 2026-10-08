@@ -324,13 +324,13 @@ if __name__ == "__main__":
 	target_train_hover_time_in_sec = 5.0
 	target_test_hover_time_in_sec = 10.0
 	delta_t_in_sec = 0.01
-	train_episode_hover_steps = int(target_train_hover_time_in_sec / delta_t_in_sec)
+	# train_episode_hover_steps = int(target_train_hover_time_in_sec / delta_t_in_sec)
 	test_episode_hover_steps = int(target_test_hover_time_in_sec / delta_t_in_sec)
 	
 	train_env = get_train_env_with_random_init_params(
 		DR_mode = True,
 		target_z = target_hover_height_in_m,
-		hover_time_in_sec = train_episode_hover_steps
+		hover_time_in_sec = target_train_hover_time_in_sec
 	)
 
 	model_PID = pid6dof.PID_Controller_6DoF(
