@@ -225,11 +225,11 @@ def get_hover_stabilization_summary_stats(all_simulations_results: dict[list[dic
 		pred_heights_z = get_algorithms_z_by_test_episodes(all_simulations_results)
 		summary_stats[algorithm_name]["mean_hover_time_in_sec"] = round(np.average(hover_time), 2)
 		MAE, MAE_std = get_MAE_of_test_episodes(pred_heights_z[algorithm_name], target_z)
-		summary_stats[algorithm_name]["hover_height_MAE_m"] = MAE
-		summary_stats[algorithm_name]["hover_height_MAE_STD_m"] = MAE_std
+		summary_stats[algorithm_name]["hover_height_MAE_m"] = round(MAE, 4)
+		summary_stats[algorithm_name]["hover_height_MAE_STD_m"] = round(MAE_std, 4)
 		RMSE, RMSE_std = get_RMSE_of_test_episodes(pred_heights_z[algorithm_name], target_z)
-		summary_stats[algorithm_name]["hover_height_RMSE_m"] = RMSE
-		summary_stats[algorithm_name]["hover_height_RMSE_STD_m"] = RMSE_std
+		summary_stats[algorithm_name]["hover_height_RMSE_m"] = round(RMSE, 4)
+		summary_stats[algorithm_name]["hover_height_RMSE_STD_m"] = round(RMSE_std, 4)
 		print(f"{algorithm_name}: ")
 		print(f"Mean_hover_time_in_sec = {summary_stats[algorithm_name]['mean_hover_time_in_sec']} sec")
 		print(f"Hover_heights_MAE_m = {summary_stats[algorithm_name]['hover_height_MAE_m']} +- {summary_stats[algorithm_name]['hover_height_MAE_STD_m']}m")
@@ -256,7 +256,8 @@ def get_algorithms_z_by_test_episodes(all_simulations_results: dict[list[dict]])
 	}
 	for (algorithm_name, simulation_results) in all_simulations_results.items():
 		for simulation_result in simulation_results:
-			z_values[algorithm_name].append(simulation_result["observations"][2])
+			episode_z_values = [observation[2] for observation in simulation_result["observations"]]
+			z_values[algorithm_name].append(episode_z_values)
 	return z_values
 
 def get_MAE_of_test_episodes(z_by_episodes: list[np.array], target_z: float):
@@ -363,7 +364,7 @@ if __name__ == "__main__":
 		trained_PPO = train_RL_algorithm(
 			RL_algorithm = model_PPO,
 			RL_algorithm_name = "PPO_RL_algorithm",
-			total_steps = 1e+6,
+			total_steps = 2e+6,
 			save_path = trained_models_path
 		)
 	if "SAC_RL_algorithm_6DoF_hover_stabilization.zip" in os.listdir(trained_models_path):
@@ -422,6 +423,7 @@ if __name__ == "__main__":
 		all_simulations_results["PPO_RL_algorithm"].append(ppo_result)
 		all_simulations_results["SAC_RL_algorithm"].append(sac_result)
 
+	print("Observations amount(SAC): ", len(all_simulations_results["SAC_RL_algorithm"][0]["observations"]))
 	result_plots_path = Path("results_plots")
 	result_plots_path.mkdir(parents = True, exist_ok = True)
 	for i in range(3):
