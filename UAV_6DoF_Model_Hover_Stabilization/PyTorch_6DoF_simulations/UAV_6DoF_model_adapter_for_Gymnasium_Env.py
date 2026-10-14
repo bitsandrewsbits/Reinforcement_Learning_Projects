@@ -27,7 +27,7 @@ class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 		self.uav_6dof_env = uav_env.UAV_6DoF_Model_Environment(
 			uav_action_name = 'hover_stabilization',
 			discount_gamma = 0.99,
-			reward_coefs = {"alpha": 2.0, "beta": 0.4, "gamma": 1.2, "delta": 0.05},
+			reward_coefs = {"alpha": 2.5, "beta": 0.4, "gamma": 1.2, "delta": 0.05},
 			init_state_vector = {
 				"p": np.array([0.0, 0.0, 0.0]),
 				"v": np.array([0, 0, 0]),
@@ -36,11 +36,11 @@ class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 			},
 			state_space_restrictions = {
 				"p": {"x": ["min_x", "max_x"], "y": ["min_y", "max_y"], "z": [0, "max_height"]}, 
-				"angeles": {"fi": [-60, 60], "teta": [-60, 60], "psi": [-180, 180]}
+				"angeles": {"fi": [-45, 45], "teta": [-45, 45], "psi": [-180, 180]} # TODO: train
 			},
 			hover_stabilization_height_in_m = self.hover_stabilization_height_in_m,
 			hover_time_in_sec = self.hover_time_in_sec,
-			max_diviation_from_hover_height = 0.02,
+			max_diviation_from_hover_height = 0.05,  # TODO: train
 			external_drag_disturbance = self.external_drag_disturbance,
 			external_wind_disturbance = self.external_wind_disturbance,
 			simulation_steps = self.simulation_max_steps,
