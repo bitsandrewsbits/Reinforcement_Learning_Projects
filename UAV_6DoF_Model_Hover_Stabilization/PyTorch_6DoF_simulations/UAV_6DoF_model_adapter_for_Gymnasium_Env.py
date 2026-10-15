@@ -11,6 +11,7 @@ import additional_functions as adf
 class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 	def __init__(self,
 	hover_stabilization_height_in_m: float, hover_time_in_sec: float,
+	max_diviation_from_hover_height: float,
 	external_drag_disturbance: bool, external_wind_disturbance: bool,
 	simulation_max_steps: int, level_of_params_uncertanty = "delta_0",
 	wind_gust_disturbance_time_level = "low",
@@ -18,6 +19,7 @@ class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 		super().__init__()
 		self.hover_stabilization_height_in_m = hover_stabilization_height_in_m
 		self.hover_time_in_sec = hover_time_in_sec
+		self.max_diviation_from_hover_height = max_diviation_from_hover_height
 		self.simulation_max_steps = simulation_max_steps
 		self.external_drag_disturbance = external_drag_disturbance
 		self.external_wind_disturbance = external_wind_disturbance
@@ -36,11 +38,12 @@ class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 			},
 			state_space_restrictions = {
 				"p": {"x": ["min_x", "max_x"], "y": ["min_y", "max_y"], "z": [0, "max_height"]}, 
-				"angeles": {"fi": [-45, 45], "teta": [-45, 45], "psi": [-180, 180]} # TODO: train
+				"angeles": {"fi": [-45, 45], "teta": [-45, 45], "psi": [-180, 180]}
 			},
 			hover_stabilization_height_in_m = self.hover_stabilization_height_in_m,
 			hover_time_in_sec = self.hover_time_in_sec,
-			max_diviation_from_hover_height = 0.05,  # TODO: train
+			# max_diviation_from_hover_height = 0.01,  # PPO
+			max_diviation_from_hover_height = self.max_diviation_from_hover_height, # SAC (check 0.02, 0.03, 0.04, 0.05)
 			external_drag_disturbance = self.external_drag_disturbance,
 			external_wind_disturbance = self.external_wind_disturbance,
 			simulation_steps = self.simulation_max_steps,
