@@ -81,10 +81,12 @@ test_episode_steps: int = 200, hover_time_in_steps: int = 100):
 		current_episode_step += 1
 	return result
 
-def get_test_env_with_random_init_params(DR_mode, target_z, hover_time_in_sec = 5.0):
+def get_env_with_random_init_params(DR_mode, target_z, 
+hover_time_in_sec = 5.0, max_diviation_from_hover_height = 0.1):
 	test_env = adpt_gym_env.UAV_6DoF_Adapter_For_GymEnv(
 		hover_stabilization_height_in_m = target_z,
 		hover_time_in_sec = hover_time_in_sec,
+		max_diviation_from_hover_height = max_diviation_from_hover_height,
 		external_drag_disturbance = True,
 		external_wind_disturbance = True,
 		simulation_max_steps = 1000,
@@ -94,18 +96,18 @@ def get_test_env_with_random_init_params(DR_mode, target_z, hover_time_in_sec = 
 	)
 	return test_env
 
-def get_train_env_with_random_init_params(DR_mode, target_z, hover_time_in_sec = 5.0):
-	train_env = adpt_gym_env.UAV_6DoF_Adapter_For_GymEnv(
-		hover_stabilization_height_in_m = target_z,
-		hover_time_in_sec = hover_time_in_sec,
-		external_drag_disturbance = True,
-		external_wind_disturbance = True,
-		simulation_max_steps = 1000,
-		DR_mode = DR_mode,
-		level_of_params_uncertanty = "delta_1",
-		wind_gust_disturbance_time_level = "low"
-	)
-	return train_env
+# def get_train_env_with_random_init_params(DR_mode, target_z, hover_time_in_sec = 5.0):
+# 	train_env = adpt_gym_env.UAV_6DoF_Adapter_For_GymEnv(
+# 		hover_stabilization_height_in_m = target_z,
+# 		hover_time_in_sec = hover_time_in_sec,
+# 		external_drag_disturbance = True,
+# 		external_wind_disturbance = True,
+# 		simulation_max_steps = 1000,
+# 		DR_mode = DR_mode,
+# 		level_of_params_uncertanty = "delta_1",
+# 		wind_gust_disturbance_time_level = "low"
+# 	)
+# 	return train_env
 
 def show_x_y_z_by_t(simulation_results: list[dict], target_z: float):
 	fig = plt.figure(figsize = (16.5, 8.5))
@@ -325,13 +327,14 @@ if __name__ == "__main__":
 	target_train_hover_time_in_sec = 5.0
 	target_test_hover_time_in_sec = 10.0
 	delta_t_in_sec = 0.01
-	# train_episode_hover_steps = int(target_train_hover_time_in_sec / delta_t_in_sec)
 	test_episode_hover_steps = int(target_test_hover_time_in_sec / delta_t_in_sec)
+	max_diviation_from_hover_height = 0.02
 	
-	train_env = get_train_env_with_random_init_params(
+	train_env = get_env_with_random_init_params(
 		DR_mode = True,
 		target_z = target_hover_height_in_m,
-		hover_time_in_sec = target_train_hover_time_in_sec
+		hover_time_in_sec = target_train_hover_time_in_sec,
+		max_diviation_from_hover_height = max_diviation_from_hover_height
 	)
 
 	model_PID = pid6dof.PID_Controller_6DoF(
@@ -364,7 +367,7 @@ if __name__ == "__main__":
 		trained_PPO = train_RL_algorithm(
 			RL_algorithm = model_PPO,
 			RL_algorithm_name = "PPO_RL_algorithm",
-			total_steps = 2e+6,
+			total_steps = 1.2e+6,
 			save_path = trained_models_path
 		)
 	if "SAC_RL_algorithm_6DoF_hover_stabilization.zip" in os.listdir(trained_models_path):
@@ -401,10 +404,11 @@ if __name__ == "__main__":
 	print("[INFO] Running 100 test simulations for PID, PPO, SAC...")
 	test_simulation_num = 100
 	for _ in range(test_simulation_num):
-		test_env = get_test_env_with_random_init_params(
+		test_env = get_env_with_random_init_params(
 			DR_mode = True,
 			target_z = target_hover_height_in_m,
-			hover_time_in_sec = target_test_hover_time_in_sec
+			hover_time_in_sec = target_test_hover_time_in_sec,
+			max_diviation_from_hover_height = max_diviation_from_hover_height
 		)
 
 		pid_result = get_PID_algorithm_simulation_result(
