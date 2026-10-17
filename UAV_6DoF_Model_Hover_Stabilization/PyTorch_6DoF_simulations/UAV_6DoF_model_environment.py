@@ -441,8 +441,8 @@ class UAV_6DoF_Model_Environment:
 		sum_penalty = self.get_sum_penalty()
 		current_state_vector_reward -= sum_penalty
 
-		if self.current_state_vector["p"][2] >= self.hover_stabilization_height_in_m - self.epsilon:
-			if self.current_state_vector["p"][2] <= self.hover_stabilization_height_in_m + self.epsilon:
+		if self.current_state_vector["p"][2] > self.hover_stabilization_height_in_m - self.epsilon:
+			if self.current_state_vector["p"][2] < self.hover_stabilization_height_in_m + self.epsilon:
 				self.hover_steps_amount += 1
 		else:
 			self.hover_steps_amount = 0
