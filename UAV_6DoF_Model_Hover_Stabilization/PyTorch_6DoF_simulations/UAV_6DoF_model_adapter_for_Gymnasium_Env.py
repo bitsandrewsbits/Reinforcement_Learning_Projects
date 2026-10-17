@@ -11,7 +11,7 @@ import additional_functions as adf
 class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 	def __init__(self,
 	hover_stabilization_height_in_m: float, hover_time_in_sec: float,
-	max_diviation_from_hover_height: float,
+	max_diviation_from_hover_height: float, reward_coefs: dict,
 	external_drag_disturbance: bool, external_wind_disturbance: bool,
 	simulation_max_steps: int, level_of_params_uncertanty = "delta_0",
 	wind_gust_disturbance_time_level = "low",
@@ -20,6 +20,7 @@ class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 		self.hover_stabilization_height_in_m = hover_stabilization_height_in_m
 		self.hover_time_in_sec = hover_time_in_sec
 		self.max_diviation_from_hover_height = max_diviation_from_hover_height
+		self.reward_coefs = reward_coefs
 		self.simulation_max_steps = simulation_max_steps
 		self.external_drag_disturbance = external_drag_disturbance
 		self.external_wind_disturbance = external_wind_disturbance
@@ -29,7 +30,7 @@ class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 		self.uav_6dof_env = uav_env.UAV_6DoF_Model_Environment(
 			uav_action_name = 'hover_stabilization',
 			discount_gamma = 0.99,
-			reward_coefs = {"alpha": 2.5, "beta": 0.4, "gamma": 1.2, "delta": 0.05},
+			reward_coefs = self.reward_coefs,
 			init_state_vector = {
 				"p": np.array([0.0, 0.0, 0.0]),
 				"v": np.array([0, 0, 0]),
@@ -42,8 +43,7 @@ class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 			},
 			hover_stabilization_height_in_m = self.hover_stabilization_height_in_m,
 			hover_time_in_sec = self.hover_time_in_sec,
-			# max_diviation_from_hover_height = 0.01,  # PPO
-			max_diviation_from_hover_height = self.max_diviation_from_hover_height, # SAC (check 0.02, 0.03, 0.04, 0.05)
+			max_diviation_from_hover_height = self.max_diviation_from_hover_height,
 			external_drag_disturbance = self.external_drag_disturbance,
 			external_wind_disturbance = self.external_wind_disturbance,
 			simulation_steps = self.simulation_max_steps,
