@@ -20,7 +20,7 @@ class Domain_Randomization_For_6DoF:
 		]
 		self.time_step = 0.01
 		self.wind_gust_disturbance_influence_time_levels = {
-			"low": 0.5, "medium": 1.0, "strong": 1.5
+			"zero": 0.0, "low": 0.5, "medium": 1.0, "strong": 1.5
 		}
 		self.wind_gust_disturbance_in_steps = int(
 			self.wind_gust_disturbance_influence_time_levels[
