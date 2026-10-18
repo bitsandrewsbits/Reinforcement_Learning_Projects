@@ -147,7 +147,8 @@ class UAV_6DoF_Model_Environment:
 		self.make_next_state_vector_as_current()
 		self.reset_next_state_vector()
 		self.current_step += 1
-		self.domain_randomizer.update_current_episode_step(self.current_step)
+		if self.domain_randomization or self.external_drag_disturbance or self.external_wind_disturbance:
+			self.domain_randomizer.update_current_episode_step(self.current_step)
 
 		return next_state_vector, current_state_vector_reward, self.target_done
 
