@@ -15,7 +15,7 @@ import PID_controller_for_6DoF_model as pid6dof
 
 def get_test_hover_stabilization_simulation_result(algorithm: dict, algorithm_name: str,
 test_env: object , target_test_hover_time_in_sec: float,
-max_diviation_for_z_stabilization_in_m: float):
+max_diviation_for_z_stabilization_in_m: float, delta_t_in_sec: float):
 	test_episode_hover_steps = int(target_test_hover_time_in_sec / delta_t_in_sec)
 	simulation_result = ''
 	if algorithm_name == "PID":
@@ -51,7 +51,8 @@ parameters_uncertanty: str, external_disturbance_level: str, compute_device: str
 			RL_algorithm = algorithm["model"],
 			RL_algorithm_name = algorithm_name,
 			total_steps = algorithm["total_steps"],
-			save_path = trained_models_path
+			save_path = trained_models_path,
+			model_name = model_name
 		)
 	return trained_model
 
@@ -224,6 +225,7 @@ def plot_z_by_t_for_algorithms(simulation_results: list[dict], target_z: float):
 			algorithm_simulation_result["hover_steps"]
 		)
 		z = [observation[2] for observation in algorithm_simulation_result["observations"]]
+		# print("Z points:", z[:5])
 		plt.plot(
 			time_in_sec, z,
 			label = f"z(t)-{algorithm_simulation_result["algorithm_name"]}"
@@ -241,7 +243,7 @@ def show_stabilization_statistics_by_algorithms(all_simulations_results: dict[li
 	fig = plt.figure(figsize = (16.5, 8.5))
 
 	hover_time_values = get_algorithms_hover_time_by_test_episodes(all_simulations_results)
-	test_episodes_nums = [i for i in range(len(hover_time_values["PID_Controller"]))]
+	test_episodes_nums = [i for i in range(len(hover_time_values["PID"]))]
 	plt.title("Move-time in save zone by time (PID, PPO, SAC)")
 	for algorithm_name, hover_times_in_sec in hover_time_values.items():
 		plt.scatter(
@@ -278,19 +280,19 @@ def get_hover_stabilization_summary_stats(all_simulations_results: dict[list[dic
 			"mean_stabilization_time_in_sec": 0.0,
 			"stabilization_time_STD_in_sec": 0.0
 		}
-		algorithm_stats["mean_hover_time_in_sec"] = round(np.average(hover_time_values[algorithm_name]), 2)
+		algorithm_stats["mean_hover_time_in_sec"] = round(float(np.average(hover_time_values[algorithm_name])), 2)
 		
 		MAE, MAE_std = get_MAE_of_test_episodes(pred_heights_z[algorithm_name], target_z)
-		algorithm_stats["hover_height_MAE_m"] = round(MAE, 4)
-		algorithm_stats["hover_height_MAE_STD_m"] = round(MAE_std, 4)
+		algorithm_stats["hover_height_MAE_m"] = round(float(MAE), 4)
+		algorithm_stats["hover_height_MAE_STD_m"] = round(float(MAE_std), 4)
 		
 		RMSE, RMSE_std = get_RMSE_of_test_episodes(pred_heights_z[algorithm_name], target_z)
-		algorithm_stats["hover_height_RMSE_m"] = round(RMSE, 4)
-		algorithm_stats["hover_height_RMSE_STD_m"] = round(RMSE_std, 4)
+		algorithm_stats["hover_height_RMSE_m"] = round(float(RMSE), 4)
+		algorithm_stats["hover_height_RMSE_STD_m"] = round(float(RMSE_std), 4)
 
-		algorithm_stats["mean_stabilization_time_in_sec"] = round(np.average(stab_times_in_sec[algorithm_name]), 2)
-		algorithm_stats["stabilization_time_STD_in_sec"] = round(
-			get_std(stab_times_in_sec[algorithm_name], algorithm_stats["mean_stabilization_time_in_sec"]),
+		algorithm_stats["mean_stabilization_time_in_sec"] = round(float(np.average(stab_times_in_sec[algorithm_name])), 2)
+		algorithm_stats["stabilization_time_STD_in_sec"] = round(float(
+			get_std(stab_times_in_sec[algorithm_name], algorithm_stats["mean_stabilization_time_in_sec"])),
 		2)
 		print(f"{algorithm_name}: ")
 		print(f"Mean_hover_time_in_sec = {algorithm_stats['mean_hover_time_in_sec']} sec.")
@@ -306,9 +308,7 @@ def get_hover_stabilization_summary_stats(all_simulations_results: dict[list[dic
 
 def get_algorithms_hover_time_by_test_episodes(all_simulations_results: dict[list[dict]]) -> dict[list]:
 	hover_time_values = {
-		"PID_Controller": [],
-		"PPO": [],
-		"SAC": []
+		algorithm_name: [] for algorithm_name in all_simulations_results.keys()
 	}
 	for (algorithm_name, simulation_results) in all_simulations_results.items():
 		for simulation_result in simulation_results:
@@ -317,9 +317,7 @@ def get_algorithms_hover_time_by_test_episodes(all_simulations_results: dict[lis
 
 def get_algorithms_z_by_test_episodes(all_simulations_results: dict[list[dict]]):
 	z_values = {
-		"PID_Controller": [],
-		"PPO": [],
-		"SAC": []
+		algorithm_name: [] for algorithm_name in all_simulations_results.keys()
 	}
 	for (algorithm_name, simulation_results) in all_simulations_results.items():
 		for simulation_result in simulation_results:
@@ -329,9 +327,7 @@ def get_algorithms_z_by_test_episodes(all_simulations_results: dict[list[dict]])
 
 def get_algorithms_stabilization_time_by_test_episodes(all_simulations_results: dict[list[dict]]):
 	stab_time_in_sec = {
-		"PID_Controller": [],
-		"PPO": [],
-		"SAC": []
+		algorithm_name: [] for algorithm_name in all_simulations_results.keys()
 	}
 	for (algorithm_name, simulation_results) in all_simulations_results.items():
 		for simulation_result in simulation_results:
@@ -400,7 +396,7 @@ def show_RMSE_comparison_plot(summary_stats: dict[dict]):
  
 if __name__ == "__main__":
 	target_hover_height_in_m = 1.5
-	PPO_reward_coeffs = {"alpha": 2.5, "beta": 0.4, "gamma": 1.2, "delta": 0.05}
+	PPO_reward_coeffs = {"alpha": 3.0, "beta": 0.4, "gamma": 1.2, "delta": 0.05}
 	SAC_reward_coeffs = {"alpha": 3.0, "beta": 0.4, "gamma": 1.2, "delta": 0.05}
 	target_train_hover_time_in_sec = 5.0
 	target_test_hover_time_in_sec = 10.0
@@ -408,31 +404,31 @@ if __name__ == "__main__":
 	test_episode_hover_steps = int(target_test_hover_time_in_sec / delta_t_in_sec)
 	max_diviation_from_hover_height = 0.01 # PPO and SAC - are good
 	max_diviation_for_z_stabilization_in_m = 0.05
-	test_simulations_num = 3
+	test_simulations_num = 100
 	trained_models_path = Path("trained_models")
 
 	RL_algorithms_train_envs = {
 		"PPO": get_env_with_random_init_params(
-			DR_mode = True,
+			DR_mode = False,
 			target_z = target_hover_height_in_m,
 			hover_time_in_sec = target_test_hover_time_in_sec,
 			max_diviation_from_hover_height = max_diviation_from_hover_height,
 			reward_coeffs = PPO_reward_coeffs,
-			drag_disturb = True,
-			wind_disturb = True,
+			drag_disturb = False,
+			wind_disturb = False,
 			params_uncertanty = "delta_1",
-			wind_gust_level = "low"
+			wind_gust_level = "zero"
 		),
 		"SAC": get_env_with_random_init_params(
-			DR_mode = True,
+			DR_mode = False,
 			target_z = target_hover_height_in_m,
 			hover_time_in_sec = target_test_hover_time_in_sec,
 			max_diviation_from_hover_height = max_diviation_from_hover_height,
 			reward_coeffs = SAC_reward_coeffs,
-			drag_disturb = True,
-			wind_disturb = True,
+			drag_disturb = False,
+			wind_disturb = False,
 			params_uncertanty = "delta_1",
-			wind_gust_level = "low"
+			wind_gust_level = "zero"
 		)
 	}
 	
@@ -480,18 +476,18 @@ if __name__ == "__main__":
 		algorithm = algorithms["PPO"], algorithm_name = "PPO",
 		trained_models_path = trained_models_path,
 		train_env = RL_algorithms_train_envs["PPO"],
-		DR_mode = True,
+		DR_mode = False,
 		parameters_uncertanty = "delta_1",
-		external_disturbance_level = "low",
+		external_disturbance_level = "zero",
 		compute_device = "cpu"
 	)
 	algorithms["SAC"]["trained_model"] = get_trained_RL_algorithm(
 		algorithm = algorithms["SAC"], algorithm_name = "SAC",
 		trained_models_path = trained_models_path,
 		train_env = RL_algorithms_train_envs["SAC"],
-		DR_mode = True,
+		DR_mode = False,
 		parameters_uncertanty = "delta_1",
-		external_disturbance_level = "low",
+		external_disturbance_level = "zero",
 		compute_device = "cuda"
 	)
 
@@ -500,22 +496,22 @@ if __name__ == "__main__":
 	print(f"[INFO] Running {test_simulations_num} test simulations for PID, PPO, SAC...")
 	for _ in range(test_simulations_num):
 		test_env = get_env_with_random_init_params(
-			DR_mode = True,
+			DR_mode = False,
 			target_z = target_hover_height_in_m,
 			hover_time_in_sec = target_test_hover_time_in_sec,
 			max_diviation_from_hover_height = max_diviation_from_hover_height,
 			reward_coeffs = SAC_reward_coeffs,
-			drag_disturb = True,
-			wind_disturb = True,
+			drag_disturb = False,
+			wind_disturb = False,
 			params_uncertanty = "delta_1",
-			wind_gust_level = "low"
+			wind_gust_level = "zero"
 		)
 		for algorithm_name in algorithms.keys():
 			simulation_result = get_test_hover_stabilization_simulation_result(
 				algorithm = algorithms[algorithm_name],
 				algorithm_name = algorithm_name,
 				test_env = test_env,
-				target_test_hover_time_in_sec = target_train_hover_time_in_sec,
+				target_test_hover_time_in_sec = target_test_hover_time_in_sec,
 				max_diviation_for_z_stabilization_in_m = max_diviation_for_z_stabilization_in_m
 			)
 			all_simulations_results[algorithm_name].append(simulation_result)
