@@ -32,7 +32,7 @@ class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 			discount_gamma = 0.99,
 			reward_coefs = self.reward_coefs,
 			init_state_vector = {
-				"p": np.array([0.0, 0.0, 0.0]),
+				"p": np.array([0.0, 0.0, self.hover_stabilization_height_in_m]),
 				"v": np.array([0, 0, 0]),
 				"q": np.array([1, 0, 0, 0]),
 				"omega": np.array([0, 0, 0])
