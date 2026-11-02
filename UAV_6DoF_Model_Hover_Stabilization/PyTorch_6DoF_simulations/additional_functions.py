@@ -1,7 +1,5 @@
 # additional functions
 import numpy as np
-import pandas as pd
-import os
 
 def get_values_as_array(target_dict: dict[np.array]) -> np.array:
 	values = []
