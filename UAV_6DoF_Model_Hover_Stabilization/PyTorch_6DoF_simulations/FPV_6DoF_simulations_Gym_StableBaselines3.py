@@ -174,17 +174,24 @@ params_uncertanty: str, wind_gust_level: str):
 	)
 	return test_env
 
-def show_x_y_z_by_t(simulation_results: list[dict], target_z: float):
+def show_x_y_z_by_t(simulation_results: list[dict], target_hover_x_y_z: list[float],
+target_hover_time_in_sec: float, hover_steps: int):
 	fig = plt.figure(figsize = (16.5, 8.5))
-	plot_x_by_t_for_algorithms(simulation_results)
-	plot_y_by_t_for_algorithms(simulation_results)
-	plot_z_by_t_for_algorithms(simulation_results, target_z)
+	target_hover_timesteps = get_target_hover_timesteps(target_hover_time_in_sec, hover_steps)
+	plot_x_by_t_for_algorithms(simulation_results, target_hover_timesteps, target_hover_x_y_z[0])
+	plot_y_by_t_for_algorithms(simulation_results, target_hover_timesteps, target_hover_x_y_z[1])
+	plot_z_by_t_for_algorithms(simulation_results, target_hover_timesteps, target_hover_x_y_z[2])
 	plt.xlabel("time, sec")
 	plt.ylabel("meters, m")
 	plt.show()
 	return fig
 
-def plot_x_by_t_for_algorithms(simulation_results: list[dict]):
+def get_target_hover_timesteps(hover_time_in_sec: float, hover_steps: int) -> list[float]:
+	timesteps = np.linspace(0, hover_time_in_sec, hover_steps)
+	return timesteps
+
+def plot_x_by_t_for_algorithms(simulation_results: list[dict],
+target_timesteps: list[float], target_hover_x: float):
 	plt.subplot(3, 1, 1)
 	plt.title("x(t)")
 	for algorithm_simulation_result in simulation_results:
@@ -197,10 +204,13 @@ def plot_x_by_t_for_algorithms(simulation_results: list[dict]):
 			time_in_sec, x,
 			label = f"x(t)-{algorithm_simulation_result["algorithm_name"]}"
 		)
+	target_x_values = [target_hover_x for _ in range(len(target_timesteps))]
+	plt.plot(target_timesteps, target_x_values, label = "target-hover-x")
 	plt.legend()
 	plt.grid()
 
-def plot_y_by_t_for_algorithms(simulation_results: list[dict]):
+def plot_y_by_t_for_algorithms(simulation_results: list[dict],
+target_timesteps: list[float], target_hover_y: float):
 	plt.subplot(3, 1, 2)
 	plt.title("y(t)")
 	for algorithm_simulation_result in simulation_results:
@@ -213,10 +223,13 @@ def plot_y_by_t_for_algorithms(simulation_results: list[dict]):
 			time_in_sec, y,
 			label = f"y(t)-{algorithm_simulation_result["algorithm_name"]}"
 		)
+	target_y_values = [target_hover_y for _ in range(len(target_timesteps))]
+	plt.plot(target_timesteps, target_y_values, label = "target-hover-y")
 	plt.legend()
 	plt.grid()
 
-def plot_z_by_t_for_algorithms(simulation_results: list[dict], target_z: float):
+def plot_z_by_t_for_algorithms(simulation_results: list[dict],
+target_timesteps: list[float], target_hover_z: float):
 	plt.subplot(3, 1, 3)
 	plt.title("z(t)")
 	for algorithm_simulation_result in simulation_results:
@@ -225,19 +238,17 @@ def plot_z_by_t_for_algorithms(simulation_results: list[dict], target_z: float):
 			algorithm_simulation_result["hover_steps"]
 		)
 		z = [observation[2] for observation in algorithm_simulation_result["observations"]]
-		# print("Z points:", z[:5])
 		plt.plot(
 			time_in_sec, z,
 			label = f"z(t)-{algorithm_simulation_result["algorithm_name"]}"
 		)
-	hover_line_points = [target_z for _ in range(len(simulation_results[0]["observations"]))]
-	time_in_sec = np.linspace(
-		0, simulation_results[0]["hover_time_in_sec"],
-		simulation_results[0]["hover_steps"]
-	)
-	plt.plot(time_in_sec, hover_line_points, label = "Hover-target-z")
+	target_z_values = [target_hover_z for _ in range(len(target_timesteps))]
+	plt.plot(target_timesteps, target_z_values, label = "target-hover-z")
 	plt.legend()
 	plt.grid()
+
+# TODO: think, how to create functions for plots(rotation angeles): fi, theta, psi from t dependencies
+# maybe in another style.
 
 def show_stabilization_statistics_by_algorithms(all_simulations_results: dict[list[dict]]):
 	fig = plt.figure(figsize = (16.5, 8.5))
@@ -396,6 +407,7 @@ def show_RMSE_comparison_plot(summary_stats: dict[dict]):
  
 if __name__ == "__main__":
 	target_hover_height_in_m = 1.5
+	target_hover_x_y_z = [0.0, 0.0, target_hover_height_in_m]
 	PPO_reward_coeffs = {"alpha": 3.0, "beta": 0.4, "gamma": 1.2, "delta": 0.05}
 	SAC_reward_coeffs = {"alpha": 3.0, "beta": 0.4, "gamma": 1.2, "delta": 0.05}
 	target_train_hover_time_in_sec = 5.0
@@ -404,7 +416,7 @@ if __name__ == "__main__":
 	test_episode_hover_steps = int(target_test_hover_time_in_sec / delta_t_in_sec)
 	max_diviation_from_hover_height = 0.01 # PPO and SAC - are good
 	max_diviation_for_z_stabilization_in_m = 0.05
-	test_simulations_num = 100
+	test_simulations_num = 10
 	trained_models_path = Path("trained_models")
 
 	RL_algorithms_train_envs = {
@@ -512,7 +524,8 @@ if __name__ == "__main__":
 				algorithm_name = algorithm_name,
 				test_env = test_env,
 				target_test_hover_time_in_sec = target_test_hover_time_in_sec,
-				max_diviation_for_z_stabilization_in_m = max_diviation_for_z_stabilization_in_m
+				max_diviation_for_z_stabilization_in_m = max_diviation_for_z_stabilization_in_m,
+				delta_t_in_sec = delta_t_in_sec
 			)
 			all_simulations_results[algorithm_name].append(simulation_result)
 
@@ -524,7 +537,11 @@ if __name__ == "__main__":
 			all_simulations_results["PPO"][i],
 			all_simulations_results["SAC"][i]
 		]
-		result_fig = show_x_y_z_by_t(test_algorithms_result, target_hover_height_in_m)
+		result_fig = show_x_y_z_by_t(
+			test_algorithms_result, target_hover_x_y_z,
+			target_test_hover_time_in_sec,
+			test_episode_hover_steps,
+		)
 		save_plot_image(result_fig, result_plots_path, i)
 
 	all_test_stabs_fig = show_stabilization_statistics_by_algorithms(all_simulations_results)
