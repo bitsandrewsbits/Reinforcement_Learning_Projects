@@ -25,8 +25,7 @@ class UAV_6DoF_Model_Environment:
 		self.current_state_vector = init_state_vector
 		self.current_state_vector_size = sum([val.shape[0] for val in self.current_state_vector.values()])
 		self.current_state_euler_angeles = np.array([0.0, 0.0, 0.0])
-		self.next_state_vector = {"p": [], "v": [], "q": [], "omega": []}
-		self.next_state_euler_angeles = np.array([0.0, 0.0, 0.0])
+		self.next_state_vector = {"p": [], "v": [], "q": [], "euler": [], "omega": []}
 		self.battery_mass_in_kg = 0.9
 		self.battery_voltage_V = 22.2
 		self.UAV_motor_mass_in_kg = 0.0476
@@ -161,12 +160,11 @@ class UAV_6DoF_Model_Environment:
 				),
 				"v": np.array([0, 0, 0]),
 				"q": np.array([1, 0, 0, 0]),
+				"euler": self.domain_randomizer.get_random_state_vector_angel_components(
+					np.array([0.0, 0.0, 0.0])
+				),
 				"omega": np.array([0, 0, 0])
 			}
-			self.current_state_euler_angeles = self.domain_randomizer.get_random_state_vector_angel_components(
-				np.array([0.0, 0.0, 0.0])
-			)
-			self.next_state_euler_angeles = self.current_state_euler_angeles.copy()
 
 			self.UAV_mass_in_kg = self.domain_randomizer.get_random_drone_mass(
 				self.UAV_mass_in_kg_baseline
@@ -174,9 +172,7 @@ class UAV_6DoF_Model_Environment:
 			self.F_g = np.array([0, 0, -self.UAV_mass_in_kg * 9.8])
 
 		self.current_state_vector = copy.deepcopy(self.init_state_vector)
-		self.current_state_euler_angeles = np.array([0.0, 0.0, 0.0])
-		self.next_state_euler_angeles = np.array([0.0, 0.0, 0.0])
-		self.next_state_vector = {"p": [], "v": [], "q": [], "omega": []}
+		self.next_state_vector = {"p": [], "v": [], "q": [], "euler": [], "omega": []}
 		
 		if self.uav_action_name == "ascent":
 			self.action_space_values = np.array(
@@ -212,9 +208,7 @@ class UAV_6DoF_Model_Environment:
 		self.define_next_vector_v()
 		self.define_next_vector_q()
 		self.define_next_vector_omega()
-		self.next_state_euler_angeles = self.get_euler_angeles(
-			self.current_state_vector["q"]
-		)
+		self.define_next_vector_euler()
 
 		return self.next_state_vector
 
@@ -227,9 +221,9 @@ class UAV_6DoF_Model_Environment:
 			"p": self.next_state_vector["p"].copy(),
 			"v": self.next_state_vector["v"].copy(),
 			"q": self.next_state_vector["q"].copy(),
+			"euler": self.next_state_vector["euler"].copy(),
 			"omega": self.next_state_vector["omega"].copy()
 		}
-		self.current_state_euler_angeles = self.next_state_euler_angeles.copy()
 
 	def reset_next_state_vector(self):
 		self.next_state_vector = {"p": [], "v": [], "q": [], "omega": []}
@@ -268,7 +262,7 @@ class UAV_6DoF_Model_Environment:
 		for (i, euler_angel) in enumerate(restricted_angeles):
 			euler_angel_min = self.state_space_restrictions["angeles"][euler_angel][0]
 			euler_angel_max = self.state_space_restrictions["angeles"][euler_angel][1]
-			component_value = self.current_state_euler_angeles[i]
+			component_value = self.current_state_vector["euler"][i]
 			if component_value > euler_angel_max or component_value < euler_angel_min:
 				return True
 		return False
@@ -408,6 +402,11 @@ class UAV_6DoF_Model_Environment:
 			moments_tau - np.cross(self.current_state_vector["omega"], dot_product_of_J_and_omega)
 		) * self.delta_t_in_sec
 
+	def define_next_vector_euler(self):
+		self.next_state_vector["euler"] = self.get_euler_angeles(
+			self.current_state_vector["q"]
+		)
+
 	def get_moment_inertia_J(self):
 		self.Jx = 2 * self.UAV_motor_mass_in_kg * self.UAV_wing_shoulder_in_m ** 2
 		self.Jy = 2 * self.UAV_motor_mass_in_kg * self.UAV_wing_shoulder_in_m ** 2
@@ -468,7 +467,7 @@ class UAV_6DoF_Model_Environment:
 			"v", [0, 1, 2], [0.0, 0.0, 0.0]
 		)
 		self.reward_penalties_by_components["angeles"] = self.reward_coefs["gamma"] * self.get_angeles_deviation_from_target(
-			self.current_state_euler_angeles, np.array([0.0, 0.0, 0.0])
+			self.current_state_vector["euler"], np.array([0.0, 0.0, 0.0])
 		)
 		self.reward_penalties_by_components["E"] = self.reward_coefs["delta"] * self.current_step_energy_consumption_E
 
