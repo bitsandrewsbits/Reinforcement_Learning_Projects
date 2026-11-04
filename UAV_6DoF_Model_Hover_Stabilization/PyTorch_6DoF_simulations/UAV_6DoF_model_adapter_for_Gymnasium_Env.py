@@ -35,6 +35,7 @@ class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 				"p": np.array([0.0, 0.0, self.hover_stabilization_height_in_m]),
 				"v": np.array([0, 0, 0]),
 				"q": np.array([1, 0, 0, 0]),
+				"euler": np.array([0, 0, 0]),
 				"omega": np.array([0, 0, 0])
 			},
 			state_space_restrictions = {
@@ -54,7 +55,7 @@ class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 		self.observation_space = Box(
 			low = -10000,
 			high = 10000,
-			shape = (13,),
+			shape = (16,),
 			dtype = np.float32
 		)
 		self.action_space = Box(
@@ -95,7 +96,9 @@ class UAV_6DoF_Adapter_For_GymEnv(gym.Env):
 if __name__ == "__main__":
 	target_hover_height_in_m = 0.8
 	env = UAV_6DoF_Adapter_For_GymEnv(
+		reward_coefs = {"alpha": 3.0, "beta": 0.4, "gamma": 1.2, "delta": 0.05},
 		hover_stabilization_height_in_m = target_hover_height_in_m,
+		max_diviation_from_hover_height = 0.1,
 		hover_time_in_sec = 3.0,
 		external_drag_disturbance = True,
 		external_wind_disturbance = True,
