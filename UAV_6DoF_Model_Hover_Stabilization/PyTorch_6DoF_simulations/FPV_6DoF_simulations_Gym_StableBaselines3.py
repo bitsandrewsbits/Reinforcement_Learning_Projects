@@ -69,7 +69,6 @@ RL_algorithm: object, RL_algorithm_name: str, total_steps: int, save_path: Path,
 
 def get_model_name(algorithm_name: str, DR_mode: bool,
 params_uncertanty: str, external_disturb_level: str) -> str:
-	# TODO: think, how to separate model names from diff cases.
 	if DR_mode:
 		model_name = f"{algorithm_name}-DR_6DoF_hover_stab_({params_uncertanty},{external_disturb_level})"
 	elif DR_mode == False and external_disturb_level:
@@ -250,6 +249,75 @@ target_timesteps: list[float], target_hover_z: float):
 # TODO: think, how to create functions for plots(rotation angeles): fi, theta, psi from t dependencies
 # maybe in another style.
 
+def show_fi_theta_psi_by_t(simulation_results: list[dict], target_hover_fi_theta_psi: list[float],
+target_hover_time_in_sec: float, hover_steps: int):
+	fig = plt.figure(figsize = (16.5, 8.5))
+	target_hover_timesteps = get_target_hover_timesteps(target_hover_time_in_sec, hover_steps)
+	plot_fi_by_t_for_algorithms(simulation_results, target_hover_timesteps, target_hover_fi_theta_psi[0])
+	plot_theta_by_t_for_algorithms(simulation_results, target_hover_timesteps, target_hover_fi_theta_psi[1])
+	plot_psi_by_t_for_algorithms(simulation_results, target_hover_timesteps, target_hover_fi_theta_psi[2])
+	plt.xlabel("time, sec")
+	plt.ylabel("angel, gradus")
+	plt.show()
+	return fig
+
+def plot_fi_by_t_for_algorithms(simulation_results: list[dict],
+target_timesteps: list[float], target_hover_fi: float):
+	plt.subplot(3, 1, 1)
+	plt.title("fi(t)")
+	for algorithm_simulation_result in simulation_results:
+		time_in_sec = np.linspace(
+			0, algorithm_simulation_result["hover_time_in_sec"],
+			algorithm_simulation_result["hover_steps"]
+		)
+		fi = [observation[10] for observation in algorithm_simulation_result["observations"]]
+		plt.plot(
+			time_in_sec, fi,
+			label = f"fi(t)-{algorithm_simulation_result["algorithm_name"]}"
+		)
+	target_fi_values = [target_hover_fi for _ in range(len(target_timesteps))]
+	plt.plot(target_timesteps, target_fi_values, label = "target-hover-fi")
+	plt.legend()
+	plt.grid()
+
+def plot_theta_by_t_for_algorithms(simulation_results: list[dict],
+target_timesteps: list[float], target_hover_theta: float):
+	plt.subplot(3, 1, 2)
+	plt.title("theta(t)")
+	for algorithm_simulation_result in simulation_results:
+		time_in_sec = np.linspace(
+			0, algorithm_simulation_result["hover_time_in_sec"],
+			algorithm_simulation_result["hover_steps"]
+		)
+		theta = [observation[11] for observation in algorithm_simulation_result["observations"]]
+		plt.plot(
+			time_in_sec, theta,
+			label = f"theta(t)-{algorithm_simulation_result["algorithm_name"]}"
+		)
+	target_theta_values = [target_hover_theta for _ in range(len(target_timesteps))]
+	plt.plot(target_timesteps, target_theta_values, label = "target-hover-theta")
+	plt.legend()
+	plt.grid()
+
+def plot_psi_by_t_for_algorithms(simulation_results: list[dict],
+target_timesteps: list[float], target_hover_psi: float):
+	plt.subplot(3, 1, 3)
+	plt.title("psi(t)")
+	for algorithm_simulation_result in simulation_results:
+		time_in_sec = np.linspace(
+			0, algorithm_simulation_result["hover_time_in_sec"],
+			algorithm_simulation_result["hover_steps"]
+		)
+		psi = [observation[12] for observation in algorithm_simulation_result["observations"]]
+		plt.plot(
+			time_in_sec, psi,
+			label = f"psi(t)-{algorithm_simulation_result["algorithm_name"]}"
+		)
+	target_psi_values = [target_hover_psi for _ in range(len(target_timesteps))]
+	plt.plot(target_timesteps, target_psi_values, label = "target-hover-psi")
+	plt.legend()
+	plt.grid()
+
 def show_stabilization_statistics_by_algorithms(all_simulations_results: dict[list[dict]]):
 	fig = plt.figure(figsize = (16.5, 8.5))
 
@@ -268,11 +336,8 @@ def show_stabilization_statistics_by_algorithms(all_simulations_results: dict[li
 	plt.show()
 	return fig
 
-def save_plot_image(figure: object, figures_path: Path, test_episode_num: int = 0, plot_name = None):
-	if plot_name:
-		figure_path = figures_path / f"{plot_name}.png"
-	else:
-		figure_path = figures_path / f"PID_PPO_SAC_x_y_z_by_t_Test_Episode_#{test_episode_num}.png"
+def save_plot_image(figure: object, figures_path: Path, test_episode_num: int, plot_name: str):
+	figure_path = figures_path / f"{plot_name}_Test_Episode_#{test_episode_num}.png"
 	figure.savefig(figure_path)
 
 def get_hover_stabilization_summary_stats(all_simulations_results: dict[list[dict]], target_z: float):
@@ -408,6 +473,7 @@ def show_RMSE_comparison_plot(summary_stats: dict[dict]):
 if __name__ == "__main__":
 	target_hover_height_in_m = 1.5
 	target_hover_x_y_z = [0.0, 0.0, target_hover_height_in_m]
+	target_hover_fi_theta_psi = [0.0, 0.0, 0.0]
 	PPO_reward_coeffs = {"alpha": 3.0, "beta": 0.4, "gamma": 1.2, "delta": 0.05}
 	SAC_reward_coeffs = {"alpha": 3.0, "beta": 0.4, "gamma": 1.2, "delta": 0.05}
 	target_train_hover_time_in_sec = 5.0
@@ -416,7 +482,7 @@ if __name__ == "__main__":
 	test_episode_hover_steps = int(target_test_hover_time_in_sec / delta_t_in_sec)
 	max_diviation_from_hover_height = 0.01 # PPO and SAC - are good
 	max_diviation_for_z_stabilization_in_m = 0.05
-	test_simulations_num = 10
+	test_simulations_num = 100
 	trained_models_path = Path("trained_models")
 
 	RL_algorithms_train_envs = {
@@ -463,8 +529,8 @@ if __name__ == "__main__":
 				verbose = 0,
 				device = "cpu"
 			),
-			"reward_coeffs": {"alpha": 2.5, "beta": 0.4, "gamma": 1.2, "delta": 0.05},
-			"total_steps": 1.2e+6,
+			"reward_coeffs": {"alpha": 3.0, "beta": 0.4, "gamma": 1.2, "delta": 0.05},
+			"total_steps": 5e+5,
 			"trained_model": ''
 		},
 		"SAC": {
@@ -537,12 +603,26 @@ if __name__ == "__main__":
 			all_simulations_results["PPO"][i],
 			all_simulations_results["SAC"][i]
 		]
-		result_fig = show_x_y_z_by_t(
+		
+		result_xyz_fig = show_x_y_z_by_t(
 			test_algorithms_result, target_hover_x_y_z,
 			target_test_hover_time_in_sec,
-			test_episode_hover_steps,
+			test_episode_hover_steps
 		)
-		save_plot_image(result_fig, result_plots_path, i)
+		save_plot_image(
+			result_xyz_fig, result_plots_path, i,
+			"PID_PPO_SAC_xyz_by_t"
+		)
+		
+		result_fi_theta_psi_fig = show_fi_theta_psi_by_t(
+			test_algorithms_result, target_hover_fi_theta_psi,
+			target_test_hover_time_in_sec,
+			test_episode_hover_steps
+		)
+		save_plot_image(
+			result_fi_theta_psi_fig, result_plots_path, i,
+			"PID_PPO_SAC_fi_theta_psi_by_t"
+		)
 
 	all_test_stabs_fig = show_stabilization_statistics_by_algorithms(all_simulations_results)
 	save_plot_image(all_test_stabs_fig, result_plots_path, 0, "All_test_episodes_stabilization_task")
