@@ -489,7 +489,7 @@ if __name__ == "__main__":
 		"PPO": get_env_with_random_init_params(
 			DR_mode = False,
 			target_z = target_hover_height_in_m,
-			hover_time_in_sec = target_test_hover_time_in_sec,
+			hover_time_in_sec = target_train_hover_time_in_sec,
 			max_diviation_from_hover_height = max_diviation_from_hover_height,
 			reward_coeffs = PPO_reward_coeffs,
 			drag_disturb = False,
@@ -500,7 +500,7 @@ if __name__ == "__main__":
 		"SAC": get_env_with_random_init_params(
 			DR_mode = False,
 			target_z = target_hover_height_in_m,
-			hover_time_in_sec = target_test_hover_time_in_sec,
+			hover_time_in_sec = target_train_hover_time_in_sec,
 			max_diviation_from_hover_height = max_diviation_from_hover_height,
 			reward_coeffs = SAC_reward_coeffs,
 			drag_disturb = False,
@@ -529,8 +529,8 @@ if __name__ == "__main__":
 				verbose = 0,
 				device = "cpu"
 			),
-			"reward_coeffs": {"alpha": 3.0, "beta": 0.4, "gamma": 1.2, "delta": 0.05},
-			"total_steps": 5e+5,
+			"reward_coeffs": PPO_reward_coeffs,
+			"total_steps": 1.2e+6,
 			"trained_model": ''
 		},
 		"SAC": {
@@ -545,7 +545,7 @@ if __name__ == "__main__":
 			    verbose = 0,
 			    device = "cuda"
 			),
-			"reward_coeffs": {"alpha": 3.0, "beta": 0.4, "gamma": 1.2, "delta": 0.05},
+			"reward_coeffs": SAC_reward_coeffs,
 			"total_steps": 5e+5,
 			"trained_model": ''
 		}
