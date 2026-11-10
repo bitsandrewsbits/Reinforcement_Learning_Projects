@@ -8,6 +8,7 @@ matplotlib.use("qt5agg")
 import matplotlib.pyplot as plt
 from timeit import default_timer as timer
 from pathlib import Path
+import json
 import os
 
 import UAV_6DoF_model_adapter_for_Gymnasium_Env as adpt_gym_env
@@ -246,9 +247,6 @@ target_timesteps: list[float], target_hover_z: float):
 	plt.legend()
 	plt.grid()
 
-# TODO: think, how to create functions for plots(rotation angeles): fi, theta, psi from t dependencies
-# maybe in another style.
-
 def show_fi_theta_psi_by_t(simulation_results: list[dict], target_hover_fi_theta_psi: list[float],
 target_hover_time_in_sec: float, hover_steps: int):
 	fig = plt.figure(figsize = (16.5, 8.5))
@@ -381,6 +379,13 @@ def get_hover_stabilization_summary_stats(all_simulations_results: dict[list[dic
 		print("-" * 40)
 		summary_stats[algorithm_name] = algorithm_stats
 	return summary_stats
+
+def save_test_simulations_summary_stats(summary_stats: dict):
+		summary_stats_file = "summary_stats.json"
+		results_path = Path("results_summary")
+		results_path.mkdir(parents = True, exist_ok = True)
+		with open(results_path / summary_stats_file, "w") as cf:
+			json.dump(summary_stats, cf, indent = 4)
 
 def get_algorithms_hover_time_by_test_episodes(all_simulations_results: dict[list[dict]]) -> dict[list]:
 	hover_time_values = {
@@ -628,6 +633,7 @@ if __name__ == "__main__":
 	save_plot_image(all_test_stabs_fig, result_plots_path, 0, "All_test_episodes_stabilization_task")
 	
 	summary_stats = get_hover_stabilization_summary_stats(all_simulations_results, target_hover_height_in_m)
+	save_test_simulations_summary_stats(summary_stats)
 	MAE_comparison_plot = show_MAE_comparison_plot(summary_stats)
 	save_plot_image(MAE_comparison_plot, result_plots_path, 0, "height_MAE_by_algorithms")
 	RMSE_comparison_plot = show_RMSE_comparison_plot(summary_stats)
