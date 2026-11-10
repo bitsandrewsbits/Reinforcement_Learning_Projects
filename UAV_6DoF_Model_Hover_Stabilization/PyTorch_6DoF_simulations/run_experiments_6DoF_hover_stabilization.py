@@ -30,7 +30,7 @@ class SAC_Hover_Stab_Experiments_Manager:
 		for algorithm in self.trained_models_config.keys():
 			self.trained_models_envs[algorithm] = f6sgsb3.get_env_with_random_init_params(
 				DR_mode = self.trained_models_config[algorithm]["train_env"]["DR_mode"],
-				target_z = self.trained_models_config[algorithm]["train_env"]["target_z"],
+				target_z = self.trained_models_config[algorithm]["train_env"]["target_xyz"][2],
 				hover_time_in_sec = self.trained_models_config[algorithm]["train_env"]["hover_time_in_sec"],
 				max_diviation_from_hover_height = (
 					self.trained_models_config[algorithm]["train_env"]["max_diviation_from_hover_height"]
@@ -90,7 +90,7 @@ class SAC_Hover_Stab_Experiments_Manager:
 				for _ in range(self.experiment_simulations):
 					test_env = f6sgsb3.get_env_with_random_init_params(
 						DR_mode = self.experiments_config[experiment_case]["test_env_params"]["DR_mode"],
-						target_z = self.experiments_config[experiment_case]["test_env_params"]["target_z"],
+						target_z = self.experiments_config[experiment_case]["test_env_params"]["target_xyz"][2],
 						hover_time_in_sec = self.experiments_config[experiment_case]["test_env_params"]["hover_time_in_sec"],
 						max_diviation_from_hover_height = (
 							self.experiments_config[experiment_case]["test_env_params"]["max_diviation_from_hover_height"]
@@ -123,9 +123,26 @@ class SAC_Hover_Stab_Experiments_Manager:
 					test_experiment_result = [
 						subcase_simulations_results[algorithm_name][i] for algorithm_name in self.algorithms.keys()
 					]
-					target_z = self.trained_models_config["SAC-N"]["train_env"]["target_z"]
-					result_fig = f6sgsb3.show_x_y_z_by_t(test_experiment_result, target_z)
-					f6sgsb3.save_plot_image(result_fig, result_plots_path, i)
+					target_hover_time_in_sec = self.trained_models_config["SAC-N"]["train_env"]["hover_time_in_sec"]
+					target_hover_timesteps = self.trained_models_config["SAC-N"]["train_env"]["hover_timesteps"]
+					
+					target_xyz = self.trained_models_config["SAC-N"]["train_env"]["target_xyz"]
+					result_xyz_t_fig = f6sgsb3.show_x_y_z_by_t(
+						simulation_results = test_experiment_result,
+						target_hover_x_y_z = target_xyz,
+						target_hover_time_in_sec = target_hover_time_in_sec,
+						hover_steps = target_hover_timesteps
+					)
+					f6sgsb3.save_plot_image(result_xyz_t_fig, result_plots_path, i, "SAC_N vs SAN_DR x-y-z(t)")
+
+					target_fi_theta_psi = self.trained_models_config["SAC-N"]["train_env"]["target_fi_theta_psi"]			
+					result_fi_theta_psi_t_fig = f6sgsb3.show_fi_theta_psi_by_t(
+						simulation_results = test_experiment_result,
+						target_hover_fi_theta_psi = target_fi_theta_psi,
+						target_hover_time_in_sec = target_hover_time_in_sec,
+						hover_steps = target_hover_timesteps
+					)
+					f6sgsb3.save_plot_image(result_fi_theta_psi_t_fig, result_plots_path, i, "SAC_N vs SAN_DR fi_theta_psi(t)")
 				
 				summary_stats = f6sgsb3.get_hover_stabilization_summary_stats(
 					subcase_simulations_results, target_hover_height_in_m
@@ -150,10 +167,13 @@ class SAC_Hover_Stab_Experiments_Manager:
 
 if __name__ == "__main__":
 	target_hover_height_in_m = 1.5
+	target_x_y_z = [0.0, 0.0, target_hover_height_in_m]
+	target_hover_fi_theta_psi = [0.0, 0.0, 0.0]
 	reward_coeffs = {"alpha": 3.0, "beta": 0.4, "gamma": 1.2, "delta": 0.05}
 	target_train_hover_time_in_sec = 5.0
 	target_test_hover_time_in_sec = 10.0
 	delta_t_in_sec = 0.01
+	target_hover_timesteps = int(target_test_hover_time_in_sec / delta_t_in_sec)
 	max_diviation_from_hover_height = 0.01
 	max_diviation_for_z_stabilization_in_m = 0.05
 	test_simulations_num = 100
@@ -163,15 +183,17 @@ if __name__ == "__main__":
 	TRAINED_MODELS_CONFIG = {
 		"SAC-N": {
 			"train_env": {
-				"DR_mode": False,
-				"target_z": target_hover_height_in_m,
+				"DR_mode": True,
+				"target_xyz": target_x_y_z,
+				"target_fi_theta_psi": target_hover_fi_theta_psi,
 				"hover_time_in_sec": target_test_hover_time_in_sec,
+				"hover_timesteps": target_hover_timesteps,
 				"max_diviation_from_hover_height": max_diviation_from_hover_height,
 				"reward_coeffs": reward_coeffs,
-				"drag_disturb": False,
-				"wind_disturb": False,
+				"drag_disturb": True,
+				"wind_disturb": True,
 				"params_uncertanty": "delta_1",
-				"wind_gust_level": "zero"
+				"wind_gust_level": "low"
 			},
 			"load_params": {
 				"algorithm_name": "SAC",
@@ -182,8 +204,10 @@ if __name__ == "__main__":
 		"SAC-DR": {
 			"train_env": {
 				"DR_mode": True,
-				"target_z": target_hover_height_in_m,
+				"target_xyz": target_x_y_z,
+				"target_fi_theta_psi": target_hover_fi_theta_psi,
 				"hover_time_in_sec": target_test_hover_time_in_sec,
+				"hover_timesteps": target_hover_timesteps,
 				"max_diviation_from_hover_height": max_diviation_from_hover_height,
 				"reward_coeffs": reward_coeffs,
 				"drag_disturb": True,
@@ -202,17 +226,19 @@ if __name__ == "__main__":
 		"case-1": {
 			"test_env_params": {
 				"DR_mode": True,
-				"target_z": target_hover_height_in_m,
+				"target_xyz": target_x_y_z,
+				"target_fi_theta_psi": target_hover_fi_theta_psi,
 				"hover_time_in_sec": target_test_hover_time_in_sec,
+				"hover_timesteps": target_hover_timesteps,
 				"max_diviation_from_hover_height": max_diviation_from_hover_height,
 				"reward_coeffs": reward_coeffs,
-				"drag_disturb": False,
-				"wind_disturb": False,
+				"drag_disturb": True,
+				"wind_disturb": True,
 				"params_uncertanty": "",
 				"wind_gust_level": ""
 			},
-			"parameters_uncertanty": ["delta_0", "delta_1", "delta_2", "delta_3"],
-			"wind_disturb_level": ["zero"]
+			"parameters_uncertanty": ["delta_0", "delta_1"],
+			"wind_disturb_level": ["zero", "low"]
 		}
 	}
 	SAC_experiments_manager = SAC_Hover_Stab_Experiments_Manager(
