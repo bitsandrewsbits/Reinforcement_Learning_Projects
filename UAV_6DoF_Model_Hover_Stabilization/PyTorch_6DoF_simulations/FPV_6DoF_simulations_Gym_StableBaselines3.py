@@ -474,8 +474,8 @@ if __name__ == "__main__":
 	target_hover_height_in_m = 1.5
 	target_hover_x_y_z = [0.0, 0.0, target_hover_height_in_m]
 	target_hover_fi_theta_psi = [0.0, 0.0, 0.0]
-	PPO_reward_coeffs = {"alpha": 3.0, "beta": 0.4, "gamma": 1.2, "delta": 0.05}
-	SAC_reward_coeffs = {"alpha": 3.0, "beta": 0.4, "gamma": 1.2, "delta": 0.05}
+	PPO_reward_coeffs = {"alpha": 2.5, "beta": 0.4, "gamma": 1.2, "delta": 0.05}
+	SAC_reward_coeffs = {"alpha": 2.5, "beta": 0.4, "gamma": 1.2, "delta": 0.05}
 	target_train_hover_time_in_sec = 5.0
 	target_test_hover_time_in_sec = 10.0
 	delta_t_in_sec = 0.01
@@ -487,26 +487,26 @@ if __name__ == "__main__":
 
 	RL_algorithms_train_envs = {
 		"PPO": get_env_with_random_init_params(
-			DR_mode = False,
+			DR_mode = True,
 			target_z = target_hover_height_in_m,
 			hover_time_in_sec = target_train_hover_time_in_sec,
 			max_diviation_from_hover_height = max_diviation_from_hover_height,
 			reward_coeffs = PPO_reward_coeffs,
-			drag_disturb = False,
-			wind_disturb = False,
+			drag_disturb = True,
+			wind_disturb = True,
 			params_uncertanty = "delta_1",
-			wind_gust_level = "zero"
+			wind_gust_level = "low"
 		),
 		"SAC": get_env_with_random_init_params(
-			DR_mode = False,
+			DR_mode = True,
 			target_z = target_hover_height_in_m,
 			hover_time_in_sec = target_train_hover_time_in_sec,
 			max_diviation_from_hover_height = max_diviation_from_hover_height,
 			reward_coeffs = SAC_reward_coeffs,
-			drag_disturb = False,
-			wind_disturb = False,
+			drag_disturb = True,
+			wind_disturb = True,
 			params_uncertanty = "delta_1",
-			wind_gust_level = "zero"
+			wind_gust_level = "low"
 		)
 	}
 	
@@ -554,18 +554,18 @@ if __name__ == "__main__":
 		algorithm = algorithms["PPO"], algorithm_name = "PPO",
 		trained_models_path = trained_models_path,
 		train_env = RL_algorithms_train_envs["PPO"],
-		DR_mode = False,
+		DR_mode = True,
 		parameters_uncertanty = "delta_1",
-		external_disturbance_level = "zero",
+		external_disturbance_level = "low",
 		compute_device = "cpu"
 	)
 	algorithms["SAC"]["trained_model"] = get_trained_RL_algorithm(
 		algorithm = algorithms["SAC"], algorithm_name = "SAC",
 		trained_models_path = trained_models_path,
 		train_env = RL_algorithms_train_envs["SAC"],
-		DR_mode = False,
+		DR_mode = True,
 		parameters_uncertanty = "delta_1",
-		external_disturbance_level = "zero",
+		external_disturbance_level = "low",
 		compute_device = "cuda"
 	)
 
@@ -574,15 +574,15 @@ if __name__ == "__main__":
 	print(f"[INFO] Running {test_simulations_num} test simulations for PID, PPO, SAC...")
 	for _ in range(test_simulations_num):
 		test_env = get_env_with_random_init_params(
-			DR_mode = False,
+			DR_mode = True,
 			target_z = target_hover_height_in_m,
 			hover_time_in_sec = target_test_hover_time_in_sec,
 			max_diviation_from_hover_height = max_diviation_from_hover_height,
 			reward_coeffs = SAC_reward_coeffs,
-			drag_disturb = False,
-			wind_disturb = False,
+			drag_disturb = True,
+			wind_disturb = True,
 			params_uncertanty = "delta_1",
-			wind_gust_level = "zero"
+			wind_gust_level = "low"
 		)
 		for algorithm_name in algorithms.keys():
 			simulation_result = get_test_hover_stabilization_simulation_result(
